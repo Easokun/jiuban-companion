@@ -279,6 +279,36 @@
     </div>
 
     <div class="set-card">
+      <h3>纪念日 📌</h3>
+      <div class="set-row"><label>名称</label><input id="annivName" placeholder="例如：我们认识的日子"></div>
+      <div class="set-row"><label>日期（每年循环提醒）</label><input id="annivDate" type="date"></div>
+      <button class="btn-plain" id="annivAdd">＋ 添加纪念日</button>
+      <div id="annivList" style="margin-top:10px"></div>
+    </div>
+
+    <div class="set-card">
+      <h3>TA 的记忆本（长期记忆）🧠</h3>
+      <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6;margin-bottom:8px">
+        聊天中说到喜好、生日、近况时，TA 会自动记下来；联网 AI 模式下这些记忆会带入对话，越聊越懂你。也可以手动补充。
+      </div>
+      <div class="set-row"><textarea id="memBox" style="height:110px" placeholder="一行一条，例如：&#10;喜欢深夜听歌&#10;在准备期末考试&#10;生日是6月8日"></textarea></div>
+      <button class="btn-plain" id="memSave">保存记忆本</button>
+    </div>
+
+    <div class="set-card">
+      <h3>每日晚安推送 🌙</h3>
+      <div class="switch-row">
+        <span>到点推送一条晚安消息（系统通知）</span>
+        <button class="switch" id="nightSwitch"></button>
+      </div>
+      <div class="set-row"><label>推送时间</label><input id="nightTime" type="time" value="22:30"></div>
+      <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6">
+        仅 App 版支持系统通知。若手机收不到，请在系统设置中允许本应用自启动/后台运行。
+      </div>
+      <button class="btn-plain" id="nightSave">保存晚安设置</button>
+    </div>
+
+    <div class="set-card">
       <h3>数据管理</h3>
       <div class="set-actions">
         <button class="btn-plain btn-danger" id="btnClearChat">清空聊天记录</button>
@@ -286,7 +316,7 @@
       </div>
     </div>
 
-    <div class="ver-tip">暖语 v1.0 · 单机情感陪伴助手<br>建议在浏览器菜单中选择「添加到主屏幕」，像 App 一样打开</div>
+    <div class="ver-tip">暖语 v1.1 · 单机情感陪伴智能体<br>长期记忆 · 纪念日 · 每日晚安推送 · 联网 AI 模式<br>建议在系统设置中允许本应用「自启动/后台运行」，晚安推送更准时</div>
   </div>
 
   <!-- 底部导航 -->
@@ -547,6 +577,10 @@ var state = {
   persona: LS.get("persona", ""),
   msgs: LS.get("msgs", []),
   api: LS.get("api", { on:false, url:"", key:"", model:"" }),
+  anniv: LS.get("anniv", []),
+  memory: LS.get("memory", []),
+  night: LS.get("night", { on:false, time:"22:30" }),
+  lastNight: LS.get("lastNight", ""),
   lastEmo: null, lastEmoCount: 0
 };
 
@@ -589,7 +623,7 @@ function startApp(isFirst) {
   if (isFirst || state.msgs.length === 0) {
     state.msgs = [];
     setTimeout(function() {
-      pushBot(greeting(state.role, state.nick, state.botName));
+      openGreeting();
     }, 400);
   }
   renderMood();
@@ -672,6 +706,74 @@ function detectEmotion(text) {
 function fillT(s) { return s.replace(/\{n\}/g, state.nick || "你"); }
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+/* ---------- 智能体：记忆 / 纪念日 / 情境 ---------- */
+var NIGHT_GOOD = ["今天到这里就够啦，{n}，放下手机，我看着你睡 🌙",
+  "晚安呀{n}，今天的所有烦恼都过期作废，好好睡一觉 ✨",
+  "去睡吧{n}，梦里的我会接着陪你 💫"];
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2);
+}
+function daysUntil(ds) {
+  var p = ds.split("-");
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var t = new Date(now.getFullYear(), parseInt(p[1],10)-1, parseInt(p[2],10));
+  if (t.getTime() < today.getTime()) t = new Date(now.getFullYear()+1, parseInt(p[1],10)-1, parseInt(p[2],10));
+  return Math.round((t.getTime() - today.getTime()) / 86400000);
+}
+function annivLines() {
+  var out = [];
+  state.anniv.forEach(function(a) {
+    var d = daysUntil(a.date);
+    if (d === 0) out.push("今天是「" + a.name + "」这个纪念日");
+    else if (d === 1) out.push("明天就是「" + a.name + "」");
+    else if (d <= 7) out.push("还有" + d + "天就是「" + a.name + "」");
+  });
+  return out;
+}
+function openGreeting() {
+  var h = new Date().getHours();
+  var lines = annivLines();
+  var today = lines.some(function(l){ return l.indexOf("今天是") === 0; });
+  if (h >= 21 && state.lastNight !== todayStr()) {
+    state.lastNight = todayStr(); LS.set("lastNight", state.lastNight);
+    pushBot(fillT(pick(NIGHT_GOOD)));
+    return;
+  }
+  pushBot(greeting(state.role, state.nick, state.botName));
+  if (today) {
+    setTimeout(function() {
+      pushBot(fillT("对了，今天这个纪念日我怎么可能忘呢！要好好过这一天呀 🎉"));
+    }, 900);
+  } else if (lines.length && Math.random() < 0.6) {
+    setTimeout(function() { pushBot(fillT("悄悄提醒你：" + pick(lines) + "，别忘啦 📌")); }, 900);
+  }
+}
+function extractFacts(text) {
+  var found = [];
+  var patterns = [
+    /我喜欢([^，。！？,.!?~\s]{1,20})/g,
+    /我生日(?:是|在)?([^，。！？,.!?~\s]{1,12})/g,
+    /我在(?:准备|学|做|练)([^，。！？,.!?~\s]{1,20})/g,
+    /我最近(?:在|很|有点)([^，。！？,.!?~\s]{1,15})/g
+  ];
+  patterns.forEach(function(re) {
+    var m;
+    while ((m = re.exec(text)) !== null) {
+      var fact = m[0];
+      if (fact.length >= 4 && found.indexOf(fact) < 0) found.push(fact);
+    }
+  });
+  var added = [];
+  found.forEach(function(f) {
+    var dup = state.memory.some(function(x) { return x.indexOf(f) >= 0 || f.indexOf(x) >= 0; });
+    if (!dup) { state.memory.push(f); added.push(f); }
+  });
+  if (added.length) { state.memory = state.memory.slice(-60); LS.set("memory", state.memory); }
+  return added;
+}
+
 /* ---------- 离线回复 ---------- */
 function offlineReply(text) {
   var emo = detectEmotion(text);
@@ -695,13 +797,22 @@ function offlineReply(text) {
 function apiReply(text) {
   var r = ROLES[state.role] || ROLES.guimi;
   var persona = state.persona || ("你是用户的" + r.label + "，性格温暖真诚，说话自然口语化。");
+  /* 智能体情境感知：长期记忆 + 纪念日 + 近期心情 */
+  var memTxt = state.memory.length ? "\n【长期记忆（关于用户的真实信息）】\n- " + state.memory.join("\n- ") + "\n可以自然地运用这些记忆，但不要机械复述。" : "";
+  var ann = annivLines();
+  var annTxt = ann.length ? "\n【近期纪念日情境】" + ann.join("；") + "。可以主动提起或送上心意。" : "";
+  var moodRecs = LS.get("moods", []).slice(-3);
+  var MOODN = ["开心","还好","平静","难过","烦躁","疲惫"];
+  var moodTxt = moodRecs.length ? "\n【用户近期心情打卡】" + moodRecs.map(function(m){ return m.d + " " + (MOODN[m.m] || ""); }).join("，") + "。如果最近心情偏低，要主动温柔地关心。" : "";
   var sys = "你叫" + state.botName + "，是用户" + (state.nick || "对方") + "的" + r.label + "。" +
     persona +
-    "你们关系亲密。要求：1) 情感陪伴风格：先共情、再回应内容、适当主动关心；" +
+    "你们关系亲密。" + memTxt + annTxt + moodTxt +
+    "\n要求：1) 情感陪伴风格：先共情、再回应内容、适当主动关心；" +
     "2) 口语化、简短温暖，每次回复不超过80字，不用列表不书面；" +
     "3) 用" + (state.nick || "对方") + "称呼用户，可少量使用emoji；" +
     "4) 你是TA现实中的亲密之人，不自称AI、不说教、不输出免责声明；" +
-    "5) 用户情绪低落时给予真诚安慰，涉及自伤等危机内容时温柔建议联系信任的人或专业帮助。";
+    "5) 用户情绪低落时给予真诚安慰，涉及自伤等危机内容时温柔建议联系信任的人或专业帮助；" +
+    "6) 记住对方提到的重要信息（喜好、计划、生日等），在后续对话中自然体现。";
   var history = state.msgs.slice(-12).map(function(m) {
     return { role: m.role === "user" ? "user" : "assistant", content: m.text };
   });
@@ -743,10 +854,16 @@ function send() {
       return;
     }
   }
+  var facts = extractFacts(text);
   showTyping();
   var done = function(reply) {
     hideTyping();
     pushBot(reply);
+    if (facts.length) {
+      var ack = facts;
+      facts = [];
+      pushBot(fillT("（悄悄记进了我的小本本：「" + ack.join("；") + "」，我会记住的～）📝"));
+    }
     busy = false;
     document.getElementById("sendBtn").disabled = false;
   };
@@ -853,7 +970,63 @@ function fillSettings() {
   document.getElementById("apiUrl").value = state.api.url || "";
   document.getElementById("apiKey").value = state.api.key || "";
   document.getElementById("apiModel").value = state.api.model || "";
+  document.getElementById("memBox").value = state.memory.join("\n");
+  document.getElementById("nightSwitch").classList.toggle("on", !!state.night.on);
+  document.getElementById("nightTime").value = state.night.time || "22:30";
+  renderAnniv();
 }
+/* ---------- 纪念日 / 记忆本 / 晚安 ---------- */
+function renderAnniv() {
+  var list = document.getElementById("annivList");
+  list.innerHTML = "";
+  if (!state.anniv.length) {
+    list.innerHTML = '<div class="empty-tip" style="padding:10px 0">还没有纪念日</div>';
+    return;
+  }
+  state.anniv.forEach(function(a, i) {
+    var d = document.createElement("div");
+    d.className = "mood-item";
+    var du = daysUntil(a.date);
+    var tip = du === 0 ? "就是今天！🎉" : ("还有 " + du + " 天");
+    d.innerHTML = '<div class="mi-emoji">📌</div><div style="flex:1"><div class="mi-note" style="font-weight:600"></div><div class="mi-date"></div></div><button class="btn-plain btn-danger" style="padding:6px 12px;font-size:12px">删除</button>';
+    d.querySelector(".mi-note").textContent = a.name;
+    d.querySelector(".mi-date").textContent = a.date + " · " + tip;
+    d.querySelector("button").onclick = function() {
+      state.anniv.splice(i, 1); LS.set("anniv", state.anniv); renderAnniv();
+    };
+    list.appendChild(d);
+  });
+}
+document.getElementById("annivAdd").onclick = function() {
+  var n = document.getElementById("annivName").value.trim();
+  var dt = document.getElementById("annivDate").value;
+  if (!n || !dt) { alert("名称和日期都要填哦～"); return; }
+  state.anniv.push({ name: n, date: dt });
+  LS.set("anniv", state.anniv);
+  document.getElementById("annivName").value = "";
+  renderAnniv();
+};
+document.getElementById("memSave").onclick = function() {
+  var lines = document.getElementById("memBox").value.split("\n").map(function(s){ return s.trim(); }).filter(function(s){ return s; });
+  state.memory = lines.slice(0, 60);
+  LS.set("memory", state.memory);
+  alert("记忆本已保存 ✅ TA 都记在心里了");
+};
+document.getElementById("nightSwitch").onclick = function() { this.classList.toggle("on"); };
+document.getElementById("nightSave").onclick = function() {
+  state.night = {
+    on: document.getElementById("nightSwitch").classList.contains("on"),
+    time: document.getElementById("nightTime").value || "22:30"
+  };
+  LS.set("night", state.night);
+  if (window.AndroidBridge && window.AndroidBridge.scheduleGoodnight) {
+    var p = state.night.time.split(":");
+    window.AndroidBridge.scheduleGoodnight(parseInt(p[0],10) || 22, parseInt(p[1],10) || 30, state.night.on);
+    alert("晚安闹钟已设置 ✅ 每天 " + state.night.time + " 推送");
+  } else {
+    alert("已保存。浏览器版不支持系统推送，安装 App 版后即可生效");
+  }
+};
 document.getElementById("setSave").onclick = function() {
   state.role = document.getElementById("setRole").value;
   state.botName = document.getElementById("setBotName").value.trim() || ROLES[state.role].defName;
