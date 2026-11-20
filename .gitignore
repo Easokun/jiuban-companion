@@ -1,0 +1,41 @@
+# ---- 构建产物 ----
+*.apk
+*.aab
+*.idsig
+*.dex
+build/
+classes/
+gen/
+out/
+*.class
+
+# ---- 签名文件（绝不入库）----
+keystore/
+*.keystore
+*.jks
+*.p12
+签名说明*.txt
+
+# ---- 前端副本（由 android/build.sh 从根目录 index.html 生成）----
+android/assets/
+
+# ---- 依赖与缓存 ----
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+pytest_cache/
+
+# ---- 部署时产生的运行时文件 ----
+deploy/.env
+deploy/access.log
+deploy/error.log
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
