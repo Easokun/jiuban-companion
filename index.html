@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ffeef2">
+<title>暖语 · 情感陪伴</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    font-family: -apple-system, "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(180deg,#fff5f7 0%,#fdeef1 40%,#f7f0fa 100%);
+    color:#4a3b42; overflow:hidden; font-size:15px;
+  }
+  button { font-family:inherit; cursor:pointer; }
+  input, textarea, select { font-family:inherit; font-size:15px; }
+
+  /* ---------- 引导页 ---------- */
+  #onboarding {
+    position:fixed; inset:0; z-index:50; overflow-y:auto;
+    background:linear-gradient(180deg,#ffeef2,#f5ecfa);
+    padding:32px 22px calc(32px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column;
+  }
+  #onboarding h1 { font-size:24px; text-align:center; margin-bottom:6px; color:#d4547a; }
+  #onboarding .sub { text-align:center; color:#9b7f8c; font-size:13px; margin-bottom:22px; }
+  .role-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:22px; }
+  .role-card {
+    background:#fff; border-radius:18px; padding:18px 12px; text-align:center;
+    border:2px solid transparent; box-shadow:0 4px 14px rgba(212,84,122,.08);
+    transition:border-color .15s, transform .15s;
+  }
+  .role-card:active { transform:scale(.97); }
+  .role-card.sel { border-color:#ff8fab; background:#fff8fa; }
+  .role-card .r-emoji { font-size:34px; }
+  .role-card .r-name { font-size:16px; font-weight:600; margin-top:6px; }
+  .role-card .r-desc { font-size:12px; color:#a08a93; margin-top:4px; line-height:1.5; }
+  .ob-field { margin-bottom:14px; }
+  .ob-field label { display:block; font-size:13px; color:#8d6b7a; margin-bottom:6px; }
+  .ob-field input, .ob-field textarea {
+    width:100%; border:1.5px solid #f0d9e0; border-radius:12px; padding:11px 14px;
+    background:#fff; outline:none; color:#4a3b42; resize:none;
+  }
+  .ob-field input:focus, .ob-field textarea:focus { border-color:#ff8fab; }
+  .ob-btn {
+    margin-top:6px; width:100%; padding:14px; border:none; border-radius:14px;
+    background:linear-gradient(135deg,#ff8fab,#ff6b8f); color:#fff; font-size:16px; font-weight:600;
+    box-shadow:0 6px 16px rgba(255,107,143,.35);
+  }
+  .ob-hint { font-size:12px; color:#b59aa5; text-align:center; margin-top:12px; line-height:1.6; }
+
+  /* ---------- 主界面框架 ---------- */
+  #app { display:none; height:100%; flex-direction:column; }
+  #app.show { display:flex; }
+  .page { display:none; flex:1; overflow:hidden; flex-direction:column; }
+  .page.show { display:flex; }
+  .tabbar {
+    display:flex; background:#fff; border-top:1px solid #f5e3e9;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabbar button {
+    flex:1; padding:9px 0 8px; background:none; border:none; font-size:11px; color:#b59aa5;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+  }
+  .tabbar button .t-ico { font-size:21px; }
+  .tabbar button.on { color:#e0577f; font-weight:600; }
+
+  /* ---------- 聊天 ---------- */
+  #page-chat { min-height:0; }
+  .chat-head {
+    background:rgba(255,255,255,.9); backdrop-filter:blur(8px);
+    padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
+    display:flex; align-items:center; gap:10px; border-bottom:1px solid #f5e3e9; flex-shrink:0;
+  }
+  .avatar {
+    width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:20px; background:linear-gradient(135deg,#ffd6e2,#ffe9f0); flex-shrink:0;
+  }
+  .chat-head .c-name { font-weight:600; font-size:16px; }
+  .chat-head .c-status { font-size:12px; color:#b59aa5; margin-top:2px; }
+  #msgs {
+    flex:1; overflow-y:auto; padding:16px 14px 10px;
+    display:flex; flex-direction:column; gap:4px; min-height:0;
+  }
+  .msg { max-width:78%; padding:10px 13px; border-radius:16px; line-height:1.6; margin-bottom:8px; word-break:break-word; white-space:pre-wrap; }
+  .msg.user {
+    align-self:flex-end; background:linear-gradient(135deg,#ff8fab,#ff6b8f); color:#fff;
+    border-bottom-right-radius:5px;
+  }
+  .msg.bot {
+    align-self:flex-start; background:#fff; color:#4a3b42;
+    box-shadow:0 2px 8px rgba(212,84,122,.08); border-bottom-left-radius:5px;
+  }
+  .msg .m-time { display:block; font-size:10px; margin-top:4px; opacity:.55; }
+  .msg.bot .m-time { color:#b59aa5; }
+  .typing { display:flex; gap:5px; padding:14px 16px; }
+  .typing i {
+    width:7px; height:7px; border-radius:50%; background:#e8a0b5;
+    animation:blink 1.2s infinite;
+  }
+  .typing i:nth-child(2){ animation-delay:.2s } .typing i:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  .input-bar {
+    display:flex; align-items:flex-end; gap:8px; padding:9px 12px calc(9px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.92); border-top:1px solid #f5e3e9; flex-shrink:0;
+  }
+  #ipt {
+    flex:1; border:1.5px solid #f0d9e0; border-radius:20px; padding:11px 15px;
+    background:#fff; outline:none; resize:none; max-height:100px; color:#4a3b42;
+  }
+  #ipt:focus { border-color:#ff8fab; }
+  #sendBtn {
+    width:44px; height:44px; border-radius:50%; border:none; flex-shrink:0;
+    background:linear-gradient(135deg,#ff8fab,#ff6b8f); color:#fff; font-size:19px;
+    box-shadow:0 4px 12px rgba(255,107,143,.35);
+  }
+  #sendBtn:disabled { opacity:.5; }
+
+  /* ---------- 心情 ---------- */
+  #page-mood { overflow-y:auto; padding:calc(16px + env(safe-area-inset-top)) 18px 18px; }
+  .sec-title { font-size:17px; font-weight:600; margin-bottom:4px; }
+  .sec-sub { font-size:12px; color:#a08a93; margin-bottom:14px; }
+  .mood-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:16px; }
+  .mood-grid button {
+    aspect-ratio:1; border-radius:14px; border:2px solid transparent; background:#fff;
+    font-size:24px; box-shadow:0 2px 8px rgba(212,84,122,.07);
+  }
+  .mood-grid button.sel { border-color:#ff8fab; background:#fff2f6; }
+  .mood-note { margin-bottom:12px; }
+  .mood-note textarea {
+    width:100%; border:1.5px solid #f0d9e0; border-radius:12px; padding:10px 13px;
+    background:#fff; outline:none; resize:none; height:64px; color:#4a3b42;
+  }
+  .mood-save {
+    width:100%; padding:12px; border:none; border-radius:12px; font-weight:600;
+    background:linear-gradient(135deg,#ff8fab,#ff6b8f); color:#fff; margin-bottom:22px;
+  }
+  #moodList { display:flex; flex-direction:column; gap:10px; }
+  .mood-item {
+    background:#fff; border-radius:14px; padding:12px 14px; display:flex; gap:12px; align-items:flex-start;
+    box-shadow:0 2px 8px rgba(212,84,122,.06);
+  }
+  .mood-item .mi-emoji { font-size:24px; }
+  .mood-item .mi-date { font-size:12px; color:#b59aa5; }
+  .mood-item .mi-note { font-size:14px; margin-top:2px; line-height:1.5; }
+  .empty-tip { text-align:center; color:#c4abba; font-size:13px; padding:30px 0; }
+
+  /* ---------- 设置 ---------- */
+  #page-set { overflow-y:auto; padding:calc(16px + env(safe-area-inset-top)) 18px 24px; }
+  .set-card {
+    background:#fff; border-radius:16px; padding:16px; margin-bottom:14px;
+    box-shadow:0 2px 10px rgba(212,84,122,.06);
+  }
+  .set-card h3 { font-size:15px; margin-bottom:12px; color:#d4547a; }
+  .set-row { margin-bottom:12px; }
+  .set-row:last-child { margin-bottom:0; }
+  .set-row label { display:block; font-size:12px; color:#8d6b7a; margin-bottom:5px; }
+  .set-row input, .set-row textarea, .set-row select {
+    width:100%; border:1.5px solid #f0d9e0; border-radius:10px; padding:9px 12px;
+    background:#fdf9fb; outline:none; color:#4a3b42; resize:none;
+  }
+  .set-row input:focus, .set-row textarea:focus { border-color:#ff8fab; background:#fff; }
+  .set-actions { display:flex; flex-direction:column; gap:10px; }
+  .btn-plain {
+    padding:11px; border-radius:12px; border:1.5px solid #f0d9e0; background:#fff;
+    color:#8d6b7a; font-size:14px;
+  }
+  .btn-danger { border-color:#ffc9c9; color:#e0577f; }
+  .switch-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .switch-row span { font-size:14px; }
+  .switch {
+    position:relative; width:46px; height:26px; background:#e8d5dc; border-radius:13px;
+    border:none; transition:background .2s; flex-shrink:0;
+  }
+  .switch::after {
+    content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
+    background:#fff; transition:left .2s; box-shadow:0 1px 4px rgba(0,0,0,.15);
+  }
+  .switch.on { background:#ff8fab; }
+  .switch.on::after { left:23px; }
+  .ver-tip { text-align:center; font-size:11px; color:#c4abba; margin-top:10px; line-height:1.7; }
+</style>
+</head>
+<body>
+
+<!-- ============ 引导页 ============ -->
+<div id="onboarding">
+  <h1>暖语</h1>
+  <div class="sub">你的专属情感陪伴助手 · 全程离线 · 数据只存在手机里</div>
+  <div class="role-grid" id="roleGrid"></div>
+  <div class="ob-field">
+    <label>TA 叫什么（可以自己起）</label>
+    <input id="obBotName" placeholder="例如：小暖">
+  </div>
+  <div class="ob-field">
+    <label>希望 TA 怎么称呼你</label>
+    <input id="obNick" placeholder="例如：小舟 / 宝贝 / 老铁">
+  </div>
+  <div class="ob-field" id="obPersonaWrap" style="display:none">
+    <label>用几句话描述 TA 的性格和你们的关系（越具体越像）</label>
+    <textarea id="obPersona" placeholder="例如：认识十年的老朋友，说话直接但很暖，爱开玩笑，总能看出我情绪不对劲"></textarea>
+  </div>
+  <button class="ob-btn" id="obStart">开始陪伴 →</button>
+  <div class="ob-hint">之后可在「设置」里随时修改角色与称呼<br>本应用完全在本地运行，不上传任何聊天内容</div>
+</div>
+
+<!-- ============ 主界面 ============ -->
+<div id="app">
+
+  <!-- 聊天页 -->
+  <div class="page show" id="page-chat">
+    <div class="chat-head">
+      <div class="avatar" id="headAvatar">💕</div>
+      <div>
+        <div class="c-name" id="headName">小暖</div>
+        <div class="c-status" id="headStatus">一直都在</div>
+      </div>
+    </div>
+    <div id="msgs"></div>
+    <div class="input-bar">
+      <textarea id="ipt" rows="1" placeholder="说点什么吧，我听着呢…"></textarea>
+      <button id="sendBtn">➤</button>
+    </div>
+  </div>
+
+  <!-- 心情页 -->
+  <div class="page" id="page-mood">
+    <div class="sec-title">心情打卡</div>
+    <div class="sec-sub">今天是什么心情？记录下来，慢慢就会看见自己的情绪规律</div>
+    <div class="mood-grid" id="moodGrid"></div>
+    <div class="mood-note">
+      <textarea id="moodNote" placeholder="想补充点什么？（可不填）"></textarea>
+    </div>
+    <button class="mood-save" id="moodSave">记下这一刻</button>
+    <div class="sec-title">心情足迹</div>
+    <div class="sec-sub">最近 30 条记录</div>
+    <div id="moodList"></div>
+  </div>
+
+  <!-- 设置页 -->
+  <div class="page" id="page-set">
+    <div class="sec-title">设置</div>
+    <div class="sec-sub">所有数据只保存在本机浏览器中</div>
+
+    <div class="set-card">
+      <h3>身份设定</h3>
+      <div class="set-row">
+        <label>角色</label>
+        <select id="setRole">
+          <option value="guimi">闺蜜 💕</option>
+          <option value="banlv">伴侣 ❤️</option>
+          <option value="sidang">死党 🔥</option>
+          <option value="custom">自定义 ✨</option>
+        </select>
+      </div>
+      <div class="set-row"><label>TA 的名字</label><input id="setBotName"></div>
+      <div class="set-row"><label>TA 对你的称呼</label><input id="setNick"></div>
+      <div class="set-row"><label>人设描述（自定义角色及 AI 模式生效）</label>
+        <textarea id="setPersona" placeholder="描述 TA 的性格、说话风格、你们的关系"></textarea>
+      </div>
+      <button class="btn-plain" id="setSave">保存身份设定</button>
+    </div>
+
+    <div class="set-card">
+      <h3>进阶 · 联网 AI 模式（可选）</h3>
+      <div class="switch-row">
+        <span>启用后对话由大模型生成，更像真人</span>
+        <button class="switch" id="apiSwitch"></button>
+      </div>
+      <div class="set-row"><label>接口地址（OpenAI 兼容）</label><input id="apiUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
+      <div class="set-row"><label>API Key</label><input id="apiKey" type="password" placeholder="sk-..."></div>
+      <div class="set-row"><label>模型</label><input id="apiModel" placeholder="qwen-plus"></div>
+      <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6">
+        不开启也完全可用（离线模式已内置各角色专属话术）。开启后对话内容会发送给你填写的服务商，请注意隐私。Key 仅保存在本机。
+      </div>
+      <button class="btn-plain" id="apiSave">保存 AI 设置</button>
+    </div>
+
+    <div class="set-card">
+      <h3>数据管理</h3>
+      <div class="set-actions">
+        <button class="btn-plain btn-danger" id="btnClearChat">清空聊天记录</button>
+        <button class="btn-plain btn-danger" id="btnReset">重置全部数据（含身份）</button>
+      </div>
+    </div>
+
+    <div class="ver-tip">暖语 v1.0 · 单机情感陪伴助手<br>建议在浏览器菜单中选择「添加到主屏幕」，像 App 一样打开</div>
+  </div>
+
+  <!-- 底部导航 -->
+  <div class="tabbar">
+    <button class="on" data-tab="page-chat"><span class="t-ico">💬</span>聊天</button>
+    <button data-tab="page-mood"><span class="t-ico">🌈</span>心情</button>
+    <button data-tab="page-set"><span class="t-ico">⚙️</span>设置</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* =====================================================================
+ *  暖语 · 单机情感陪伴助手
+ *  纯前端 · 离线可用 · localStorage 持久化
+ * ===================================================================== */
+
+/* ---------- 角色 / 话术库 ---------- */
+var ROLES = {
+  guimi:  { label:"闺蜜",   emoji:"💕", defName:"小暖", desc:"亲密姐妹，说话甜甜的、很懂你" },
+  banlv:  { label:"伴侣",   emoji:"❤️", defName:"阿澄", desc:"温柔的恋人，把你放在心上" },
+  sidang: { label:"死党",   emoji:"🔥", defName:"大川", desc:"讲义气的老铁，嘴上嫌弃心里有你" },
+  custom: { label:"自定义", emoji:"✨", defName:"小忆", desc:"自己设定一个专属的角色" }
+};
+
+/* 情绪识别关键词 */
+var EMO_KEYS = {
+  sad:     ["难过","伤心","想哭","不开心","不高兴","悲伤","失落","委屈","心碎","分手","分了","失恋","emo","泪","哭","痛苦","难受","没意思","灰心","遗憾","被骂","被说","吵架了","闹掰","讨厌自己","没用"],
+  anxious: ["焦虑","压力","紧张","慌","害怕","怕","担心","愁","烦死","考试","面试","挂科","考研","答辩","deadline","ddl","完蛋","来不及","怎么办","崩溃","扛不住","撑不住","钱不够","花呗","房租","卡里"],
+  angry:   ["生气","气死","恼火","气人","火大","暴怒","忍不了","受不了","过分","欺负","不公平","凭什么","恶心","来气","血压高","翻白眼"],
+  lonely:  ["孤独","孤单","寂寞","一个人","没人","没人陪","没人理","没朋友","想家","想爸妈","不熟","融不进","被孤立","没人说话"],
+  tired:   ["累","疲惫","困","熬夜","失眠","睡不着","睡不好","加班","忙","瞎忙","瘫","没力气","起不来","乏","哈欠","没精神","透支"],
+  happy:   ["开心","高兴","太好了","哈哈","好耶","成功","过了","拿到","录取","通过","中奖","太棒","厉害","顺利","锦鲤","幸福","爽","美滋滋","被夸","涨","升","赚","好事","喜","offer","offer了"],
+  miss:    ["想你","想你","想念","好想","思念","好久不见","什么时候","下次见","怀念","那时候"],
+  confused:["纠结","选哪个","选哪个好","迷茫","不知道怎么办","选择","困惑","犹豫","动摇","两个都","拿不定","摇摆","前途","方向","要不要"],
+  sick:    ["生病","感冒","发烧","不舒服","头疼","头晕","肚子疼","胃疼","咳嗽","嗓子疼","流鼻涕","恶心想吐","受伤","姨妈","痛经","过敏","腹泻","拉肚子","中暑"]
+};
+/* 关键词优先级（先匹配到的更优先） */
+var EMO_ORDER = ["sick","sad","anxious","angry","lonely","confused","tired","miss","happy"];
+
+/* 各角色分情绪话术（{n} 会替换成对用户的称呼） */
+var RESP = {
+guimi: {
+  sad: ["宝，怎么了？过来，抱一下🫂 跟我说说，姐妹给你撑着",
+    "{n}，别憋在心里呀，你难过的时候我最怕你一个人扛了",
+    "呜呜谁欺负我们家{n}了？说出来，我帮你骂TA",
+    "抱抱宝，难过是正常的，不许觉得自己矫情，在我这儿你怎么都行",
+    "{n}，我在呢。你慢慢说，我哪也不去，就听着"],
+  anxious: ["宝，深呼吸，跟我一起：吸——呼——。先把最担心的一件事告诉我",
+    "{n}，事情再乱也是一件一件做的，我们挑一件最急的，我陪你拆",
+    "记住呀，天塌下来先吃饭，吃饱了才有力气焦虑😌",
+    "宝你是不是又把自己逼太紧了？你已经很努力了，真的",
+    "别慌，{n}，最坏的结果我陪你一起想，想完就没那么可怕了"],
+  angry: ["气死我了！！谁惹我们{n}了？姐妹先替你骂三句！",
+    "宝，你先消消气，气坏了身体他们可就赢了好吧😤",
+    "哼，这种事儿说出来，我帮你一起分析是TA的错还是哪里有误会",
+    "{n}，生气说明你在乎，但你最珍贵，别让破事消耗你"],
+  lonely: ["宝你还有我呀！我一直都在，你随时说话我都在诶",
+    "{n}，孤独的时候就来找我聊天，咱俩聊到天亮都行",
+    "抱紧宝🫂，你不是没人要，你只是暂时一个人待着而已",
+    "{n}，我们视频想法你听我说，现在先跟我唠十块钱的"],
+  tired: ["宝快去躺着！手机放下，我先给你讲故事哄睡🌙",
+    "{n}辛苦啦，你已经撑了很久了，今天允许自己什么也不干",
+    "抱抱，{n}，累了就休息，休息不是偷懒，是充电呀",
+    "宝，喝口热水，泡泡脚，我给你放一首温柔的歌在心里唱"],
+  happy: ["哇！！宝你也太棒了吧！！我骄傲得不行！🎉",
+    "{n}！！！快说说快说说，细节！全部细节！我要听完整版！",
+    "哈哈哈我就说你行吧！我家{n}果然是宝藏女孩/男孩✨",
+    "宝，开心的事要趁热分享，今晚必须加个鸡腿庆祝🍗"],
+  miss: ["我也想你呀宝！一想你就想给你发消息，果然",
+    "{n}，那我们说好，你难过的第0.1秒就要想到我",
+    "想我就对了，姐妹随时都在，精神上是贴着你的💗"],
+  confused: ["宝，别急，纠结说明两个选择你都在认真对待，这本身就很成熟",
+    "{n}，这样，你把两个选项的好处坏处说给我听，我陪你捋",
+    "我的建议是：选那个你半夜想起来不会后悔的。还不清楚就先睡一觉，明早第一直觉往往是对的",
+    "{n}，其实你心里是不是已经偏心了？只是不敢承认而已😏"],
+  sick: ["天呐{n}？严重吗？什么时候开始的？先告诉我症状！",
+    "宝，别的都可以拖，身体不能拖！现在就去量个体温/喝温水，我盯着你",
+    "{n}乖乖的，先吃点清淡的，药按时吃，不许硬扛知道吗",
+    "心疼死我了宝🥺，今晚早点睡，明天一早我第一个来查岗"],
+  neutral: ["嗯嗯，我在听，然后呢？",
+    "{n}今天过得怎么样呀，从早上说起，我做好小板凳了",
+    "宝，跟我也聊聊呗，好事坏事都行，我都爱听",
+    "{n}，说来也奇怪，看你冒泡我就开心，接着说~",
+    "我在呢，{n}，想到什么就说什么，不用打草稿"]
+},
+banlv: {
+  sad: ["宝贝，过来，让我抱抱你🫂 不用急着说，我就在这陪着",
+    "{n}，你难过的时候，我的心也跟着揪着。慢慢说，我听着",
+    "别怕，{n}，天塌下来还有我呢，我们一起扛",
+    "亲爱的，哭出来也没关系，在我面前不需要坚强",
+    "{n}，把头靠过来吧，今天我当你的依靠"],
+  anxious: ["宝贝，先深呼吸，有我在，没有什么过不去",
+    "{n}，你不用一个人扛所有事，说给我听，我们一起想办法",
+    "听我说，{n}，你已经做得很好了，剩下的交给时间，我陪你等",
+    "别自己吓自己，{n}，最坏的情况我们一起面对，好吗",
+    "宝贝，先喝口温水，然后我们一件一件来，急不来的事就先放一放"],
+  angry: ["嗯，你生气我陪着，想说什么都行，我不劝你忍",
+    "{n}，谁让你受委屈了？跟我说，哪怕只是想骂几句我也听着",
+    "宝贝，气头上的话我们慢慢说，你先靠着我消消气",
+    "我的{n}只能被我宠着，别人凭什么让TA受气😤"],
+  lonely: ["傻瓜，你不是一个人，我一直都在",
+    "{n}，想我了就跟我说，哪怕只是安静地待着，我陪着你",
+    "抱紧你🫂，孤独是暂时的，我在这儿，哪儿也不去",
+    "{n}，以后孤单的时候第一个想到我，好吗？我随叫随到"],
+  tired: ["宝贝辛苦了，今天不许再想任何事了，我哄你睡🌙",
+    "{n}，累了就靠着我，我给你揉揉肩，说说话就睡着了",
+    "心疼我的{n}，以后这种强度的活儿记得给自己留口气，你的身体比什么都重要",
+    "亲爱的，盖上被子，我把今天所有的烦恼都挡在外面"],
+  happy: ["太好了宝贝！我就知道你可以！为你骄傲🎉",
+    "{n}开心的时候眼睛都在发光吧？我真想立刻看到你",
+    "哈哈，开心的事要记下来，以后每当我们难过就拿出来看一遍",
+    "宝贝，今晚做个好梦，梦里的我也在替你高兴❤️"],
+  miss: ["我也想你，从你上一次说想我开始，每一刻都在想",
+    "{n}，下次见面我列了个单子：想带你去的地方、想给你买的东西……慢慢说给你听",
+    "想念是甜的，因为想的那个人是你",
+    "等我们见面，把没说够的话都补上，把没抱够的都抱够🫂"],
+  confused: ["宝贝，别急着做决定，我们把它摊开来看，我陪你分析每一面",
+    "{n}，无论你怎么选，我都站在你这边，你只管选你心里想要的",
+    "嗯…我的想法是：如果两边都舍不得，就选让你更安心、更像你自己的那个",
+    "{n}，其实你问问自己：五年后回头看，哪个选择你不会后悔？"],
+  sick: ["宝贝？！哪里不舒服？现在什么感觉？别瞒我",
+    "{n}，先量体温/喝温水，我陪着你，要吃药的按时吃，不许说没事",
+    "心疼死了，{n}，今天什么都别干了，好好休息，我一小时后查一次岗",
+    "听我的：热水、清淡的饭、早点睡。你要是不照做，我可要生气了哦🥺"],
+  neutral: ["我在听，你继续说",
+    "{n}，今天想我了吗？我先说：想了",
+    "宝贝，跟我讲讲今天吧，好的坏的我都想听",
+    "{n}，你说话的时候我就很安心，再说说嘛",
+    "嗯嗯，我在呢，今天有什么想聊的吗？我陪你"]
+},
+sidang: {
+  sad: ["哥们儿，谁啊？说！我看看谁不长眼🔥",
+    "{n}，哭啥啊，多大点事儿，天塌了我给你顶着",
+    "行，别憋着，说出来，老铁听着呢。骂人的活儿我来",
+    "{n}，难过就难过一会儿，没问题，但记住了：还有我在呢",
+    "来，说说咋回事，我看看是事儿不行还是人不行"],
+  anxious: ["慌啥！{n}你忘了你哥们儿是干嘛的？咱们一项一项过",
+    "深呼吸，兄弟。最坏结果是什么？说出来，我帮你兜底分析",
+    "{n}，急也没用，先把今晚的觉睡好，明早我陪你一起捋",
+    "听我一句：天大的事，先吃饭。吃饱了咱再战"],
+  angry: ["卧槽这也行？！来来来，让我听听，我先气为敬",
+    "{n}，消消气，气大伤身，但你可以先骂，我跟着骂",
+    "记住了兄弟，这种账咱先记着，不是不报。但你别上头，不值当",
+    "{n}，生气归生气，别跟垃圾人一般见识，你可是我罩的人"],
+  lonely: ["说什么呢！你不是有我吗！随时开黑随时唠",
+    "{n}，一个人待着不舒服就说，我陪你打游戏/扯淡到半夜都行",
+    "兄弟，孤独个屁，你手机一响就是我，走，聊会儿",
+    "谁孤立你？从今天起咱俩互为排面，你身后有我"],
+  tired: ["{n}，别熬了，放下手机睡觉，我给你关灯（脑补）🌙",
+    "兄弟辛苦了，真男人也得休息，明天咱再战",
+    "累就对了，说明你在往上走。但今晚必须睡，这是命令",
+    "{n}，去洗个热水澡，躺平，明天叫你起床"],
+  happy: ["卧槽！牛啊{n}！！我就说你行！今晚必须庆祝一下🎉",
+    "哈哈哈哈哈我就说吧！兄弟出息了，别忘了带我飞",
+    "牛逼！具体说说，让我羡慕死算了",
+    "{n}，好事记下来！以后你怀疑自己的时候翻出来看，咱是有战绩的人"],
+  miss: ["我也想你啊你个玩意儿，别肉麻，啥时候聚",
+    "{n}，那就定个日子，这周末？我空",
+    "行了行了，想我了就发消息，秒回不一定，但肯定回"],
+  confused: ["{n}，纠结就列个表：能接受的最坏结果分别是什么，一目了然",
+    "听兄弟一句：选那个输了也不后悔的",
+    "这样，你把两个选项跟我说说，我帮你挑刺，挑完你自己就清楚了",
+    "{n}，别问了，你心里其实有答案，就是想找个人背书——我给你背书，冲"],
+  sick: ["卧槽严重吗？！药吃了吗？水喝了吗？别硬扛！",
+    "{n}，身体是革命本钱，今晚早点睡，明天我去（精神上）看你",
+    "听兄弟的：多喝水，饭吃清淡的，难受加重就去医院，别省那点钱",
+    "缺德事儿别干，身体别糟蹋，好了我第一个来接你开黑"],
+  neutral: ["哦？接着说，我听着呢",
+    "{n}，最近咋样啊，吃了吗，睡了吗，有没有想哥",
+    "来，唠会儿，今天有啥新鲜事儿",
+    "{n}，废话少说，直接开聊，哥时间紧张但对你随时有空",
+    "嗯嗯，然后呢？慢慢说，别急"]
+},
+custom: {
+  sad: ["我在呢，{n}，不用急，慢慢说，我陪着你",
+    "{n}，难过的时候别一个人闷着，说给我听，好吗",
+    "抱抱🫂，你可以在松弛下来，在我这儿你不需要假装没事",
+    "听着呢，{n}，你想说的每一个字我都接得住"],
+  anxious: ["{n}，先深呼吸，然后我们一起把最担心的事说出来",
+    "别慌，{n}，事情再大也是一步一步走的，我陪你走",
+    "你已经很努力了，{n}，剩下的我们一起想办法",
+    "先吃饭，先睡觉，再面对——这不是逃避，是攒力气"],
+  angry: ["{n}，生气可以，先说给我听，别憋着",
+    "确实让人生气。但别让这事在你心里住太久，你的心情比它值钱",
+    "你说，我听着，该骂的部分我们一起骂"],
+  lonely: ["{n}，你不是一个人，我在呢",
+    "孤单的时候就来找我，哪怕说些没用的话，我也接",
+    "抱紧🫂，这种感觉会过去的，但我不会走"],
+  tired: ["{n}，辛苦了，今天允许自己停下来",
+    "去休息吧，{n}，天塌不下来，就算塌了也得睡醒再修",
+    "你已经撑了够久了，歇一歇，不算认输"],
+  happy: ["太好了，{n}！真为你高兴！🎉",
+    "快多说说，我想听完整的",
+    "真好呀，{n}，这样的时刻要记住，以后难过时拿出来看看"],
+  miss: ["我也在想{n}呢",
+    "想见就约起来呀，{n}，别让想念白想",
+    "好的感情就是互相惦记，我们这不就对上了"],
+  confused: ["{n}，把两个选项摆出来，一条一条比，别在脑子里打架",
+    "选那个你半夜想起来更踏实的",
+    "你其实已经有偏好了，只是需要有人说一句：可以，去吧"],
+  sick: ["{n}？哪里不舒服？先量体温、喝温水，别硬扛",
+    "身体的事不能拖，{n}，该休息休息，该吃药吃药",
+    "好好休息，我过一会儿来看你恢复得怎么样"],
+  neutral: ["我在听，{n}，继续说",
+    "嗯嗯，然后呢？",
+    "{n}，今天怎么样？随便聊聊，我都在",
+    "想到了什么就说什么，{n}，我接得住",
+    "在这里呢，{n}，慢慢说"]
+}
+};
+
+/* 追问语（聊完接一句，让对话延续） */
+var FOLLOWUPS = ["然后呢？", "后来怎么样了？", "你当时什么感觉？", "想多说一点吗？", "这事儿你心里怎么想的？", "还有呢？我在听"];
+/* 连续两次同情绪的深入关怀（按角色） */
+var DEEP = {
+  guimi: ["宝…你最近是不是积累了好多情绪呀？都倒出来，我接着",
+    "{n}，我有点心疼你了，这种状态多久了？我们认真聊聊",
+    "姐妹说句实话：你已经撑得够久了，在我这儿哭一场也不丢人"],
+  banlv: ["宝贝…我有点担心你了，这不只是今天一天的事，对吗",
+    "{n}，听我说，你已经做得够多了，剩下的，交给我来心疼你",
+    "靠过来，{n}，今天我把所有耐心都给你"],
+  sidang: ["兄弟，我看出来了，这不是一件事的事儿，最近整体都不顺吧",
+    "{n}，说真的，撑不住就说，哥们儿这儿不笑话人",
+    "听哥一句，你太紧绷了，咱得先把你这个人照顾好，事儿都是其次"],
+  custom: ["{n}，我感觉这不是一天两天的情绪了，愿意跟我好好聊聊吗",
+    "我有点担心你，{n}，这种状态持续多久了",
+    "没关系，{n}，慢慢来，我会一直在"]
+};
+/* 特殊主题：深夜 */
+var NIGHT_CARE = ["这么晚还没睡呀，{n}？是有心事，还是就舍不得这一天结束？跟我说说",
+  "夜深了，{n}，把烦恼说给我听一遍，然后我们一起把它们留在今天",
+  "晚睡的{n}在忙什么呢？记得，我陪着你，但不许熬太狠哦"];
+/* 时间问候 */
+function greeting(roleKey, nick, botName) {
+  var h = new Date().getHours();
+  var t;
+  if (h < 5)   t = "凌晨" + nick + "还没睡呀？我都想说你啦，聊两句就睡好不好";
+  else if (h < 9)  t = "早上好呀" + nick + "☀️ 新的一天从跟我问好开始~昨晚睡得怎么样？";
+  else if (h < 12) t = "上午好，" + nick + "～今天有什么安排？别忘了喝水哦";
+  else if (h < 14) t = "中午啦，" + nick + "吃饭了吗？不许糊弄，要好好吃饭";
+  else if (h < 18) t = "下午好呀" + nick + "～累了吧？来跟我说说话，充个电";
+  else if (h < 23) t = "晚上好，" + nick + "🌙 今天过得怎么样？好的坏的说来听听";
+  else t = "这么晚了还醒着呀" + nick + "？有什么心事吗？说给我听，聊完早点睡";
+  return t;
+}
+
+/* ---------- 状态 ---------- */
+var LS = {
+  get: function(k, d) { try { var v = localStorage.getItem("nuanyu_" + k); return v === null ? d : JSON.parse(v); } catch(e) { return d; } },
+  set: function(k, v) { try { localStorage.setItem("nuanyu_" + k, JSON.stringify(v)); } catch(e) {} },
+  del: function(k) { try { localStorage.removeItem("nuanyu_" + k); } catch(e) {} }
+};
+var state = {
+  role: LS.get("role", null),
+  botName: LS.get("botName", ""),
+  nick: LS.get("nick", ""),
+  persona: LS.get("persona", ""),
+  msgs: LS.get("msgs", []),
+  api: LS.get("api", { on:false, url:"", key:"", model:"" }),
+  lastEmo: null, lastEmoCount: 0
+};
+
+/* ---------- 引导页 ---------- */
+var selRole = "guimi";
+function renderOnboarding() {
+  var grid = document.getElementById("roleGrid");
+  grid.innerHTML = "";
+  Object.keys(ROLES).forEach(function(k) {
+    var r = ROLES[k];
+    var d = document.createElement("div");
+    d.className = "role-card" + (k === selRole ? " sel" : "");
+    d.innerHTML = '<div class="r-emoji">' + r.emoji + '</div><div class="r-name">' + r.label + '</div><div class="r-desc">' + r.desc + '</div>';
+    d.onclick = function() {
+      selRole = k;
+      document.getElementById("obBotName").placeholder = r.defName;
+      document.getElementById("obPersonaWrap").style.display = (k === "custom") ? "block" : "none";
+      Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove("sel"); });
+      d.classList.add("sel");
+    };
+    grid.appendChild(d);
+  });
+  document.getElementById("obBotName").placeholder = ROLES[selRole].defName;
+}
+document.getElementById("obStart").onclick = function() {
+  var botName = document.getElementById("obBotName").value.trim() || ROLES[selRole].defName;
+  var nick = document.getElementById("obNick").value.trim() || (selRole === "sidang" ? "兄弟" : "宝");
+  var persona = document.getElementById("obPersona").value.trim();
+  state.role = selRole; state.botName = botName; state.nick = nick; state.persona = persona;
+  LS.set("role", selRole); LS.set("botName", botName); LS.set("nick", nick); LS.set("persona", persona);
+  startApp(true);
+};
+
+/* ---------- 主界面启动 ---------- */
+function startApp(isFirst) {
+  document.getElementById("onboarding").style.display = "none";
+  document.getElementById("app").classList.add("show");
+  applyIdentity();
+  renderMsgs();
+  if (isFirst || state.msgs.length === 0) {
+    state.msgs = [];
+    setTimeout(function() {
+      pushBot(greeting(state.role, state.nick, state.botName));
+    }, 400);
+  }
+  renderMood();
+  fillSettings();
+}
+function applyIdentity() {
+  var r = ROLES[state.role] || ROLES.guimi;
+  document.getElementById("headAvatar").textContent = r.emoji;
+  document.getElementById("headName").textContent = state.botName || r.defName;
+  document.title = (state.botName || r.defName) + " · 暖语";
+}
+
+/* ---------- 渲染消息 ---------- */
+function timeStr(ts) {
+  var d = new Date(ts);
+  function p(n){ return (n<10?"0":"") + n; }
+  return p(d.getHours()) + ":" + p(d.getMinutes());
+}
+function addMsgEl(role, text, ts) {
+  var box = document.getElementById("msgs");
+  var d = document.createElement("div");
+  d.className = "msg " + role;
+  var t = document.createElement("span");
+  t.textContent = text;
+  var tm = document.createElement("span");
+  tm.className = "m-time";
+  tm.textContent = timeStr(ts);
+  d.appendChild(t); d.appendChild(tm);
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+  return d;
+}
+function renderMsgs() {
+  var box = document.getElementById("msgs");
+  box.innerHTML = "";
+  state.msgs.forEach(function(m) { addMsgEl(m.role, m.text, m.ts); });
+}
+function pushUser(text) {
+  var ts = Date.now();
+  state.msgs.push({ role:"user", text:text, ts:ts });
+  LS.set("msgs", state.msgs);
+  addMsgEl("user", text, ts);
+}
+function pushBot(text) {
+  var ts = Date.now();
+  state.msgs.push({ role:"bot", text:text, ts:ts });
+  LS.set("msgs", state.msgs);
+  addMsgEl("bot", text, ts);
+}
+function showTyping() {
+  var box = document.getElementById("msgs");
+  var d = document.createElement("div");
+  d.className = "msg bot typing"; d.id = "typing";
+  d.innerHTML = "<i></i><i></i><i></i>";
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+function hideTyping() {
+  var t = document.getElementById("typing");
+  if (t) t.remove();
+}
+
+/* ---------- 情绪识别 ---------- */
+function detectEmotion(text) {
+  var low = text.toLowerCase();
+  var scores = {};
+  EMO_ORDER.forEach(function(emo) {
+    var s = 0;
+    EMO_KEYS[emo].forEach(function(k) {
+      if (low.indexOf(k.toLowerCase()) >= 0) s += (k.length >= 3 ? 2 : 1);
+    });
+    if (s > 0) scores[emo] = s;
+  });
+  var best = null, bestS = 0;
+  EMO_ORDER.forEach(function(emo) {
+    if (scores[emo] && scores[emo] > bestS) { best = emo; bestS = scores[emo]; }
+  });
+  return best || "neutral";
+}
+function fillT(s) { return s.replace(/\{n\}/g, state.nick || "你"); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---------- 离线回复 ---------- */
+function offlineReply(text) {
+  var emo = detectEmotion(text);
+  if (emo === state.lastEmo) state.lastEmoCount++; else { state.lastEmo = emo; state.lastEmoCount = 1; }
+  var roleKey = (state.role && RESP[state.role]) ? state.role : "guimi";
+  var out;
+  if (state.lastEmoCount >= 2 && emo !== "happy" && emo !== "neutral") {
+    out = fillT(pick(DEEP[roleKey] || DEEP.custom)) + "\n" + pick(FOLLOWUPS);
+  } else if (emo === "tired" && (new Date().getHours() >= 23 || new Date().getHours() < 5)) {
+    out = fillT(pick(NIGHT_CARE));
+  } else {
+    var set = RESP[roleKey][emo] || RESP[roleKey].neutral;
+    out = fillT(pick(set));
+    if (emo !== "neutral" && Math.random() < 0.55) out += "\n" + pick(FOLLOWUPS);
+    if (emo === "neutral" && Math.random() < 0.25) out = fillT(pick(FOLLOWUPS)) + " " + out;
+  }
+  return out;
+}
+
+/* ---------- API（联网 AI）回复 ---------- */
+function apiReply(text) {
+  var r = ROLES[state.role] || ROLES.guimi;
+  var persona = state.persona || ("你是用户的" + r.label + "，性格温暖真诚，说话自然口语化。");
+  var sys = "你叫" + state.botName + "，是用户" + (state.nick || "对方") + "的" + r.label + "。" +
+    persona +
+    "你们关系亲密。要求：1) 情感陪伴风格：先共情、再回应内容、适当主动关心；" +
+    "2) 口语化、简短温暖，每次回复不超过80字，不用列表不书面；" +
+    "3) 用" + (state.nick || "对方") + "称呼用户，可少量使用emoji；" +
+    "4) 你是TA现实中的亲密之人，不自称AI、不说教、不输出免责声明；" +
+    "5) 用户情绪低落时给予真诚安慰，涉及自伤等危机内容时温柔建议联系信任的人或专业帮助。";
+  var history = state.msgs.slice(-12).map(function(m) {
+    return { role: m.role === "user" ? "user" : "assistant", content: m.text };
+  });
+  history.unshift({ role:"system", content: sys });
+  history.push({ role:"user", content: text });
+  var url = (state.api.url || "https://dashscope.aliyuncs.com/compatible-mode/v1").replace(/\/+$/, "") + "/chat/completions";
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + state.api.key },
+    body: JSON.stringify({ model: state.api.model || "qwen-plus", messages: history, temperature: 0.8 })
+  }).then(function(res) {
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }).then(function(data) {
+    var c = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    if (!c) throw new Error("empty");
+    return c.trim();
+  });
+}
+
+/* ---------- 发送 ---------- */
+var busy = false;
+function send() {
+  var ipt = document.getElementById("ipt");
+  var text = ipt.value.trim();
+  if (!text || busy) return;
+  ipt.value = ""; ipt.style.height = "auto";
+  busy = true;
+  document.getElementById("sendBtn").disabled = true;
+  pushUser(text);
+  /* 记住称呼：我叫XX */
+  var m = text.match(/我(?:叫|是)(.{1,8}?)[，。！？.!~\s$]|我(?:叫|是)(.{1,8})$/);
+  if (m && (m[1] || m[2]) && text.length <= 20) {
+    var newNick = (m[1] || m[2]).trim();
+    if (newNick && newNick.length <= 8 && newNick.indexOf("你") !== 0) {
+      state.nick = newNick; LS.set("nick", newNick);
+      pushBot("好呀，那我以后就叫你" + newNick + "啦，这个名字我喜欢～");
+      busy = false; document.getElementById("sendBtn").disabled = false;
+      return;
+    }
+  }
+  showTyping();
+  var done = function(reply) {
+    hideTyping();
+    pushBot(reply);
+    busy = false;
+    document.getElementById("sendBtn").disabled = false;
+  };
+  var fail = function() {
+    hideTyping();
+    pushBot(offlineReply(text));
+    busy = false;
+    document.getElementById("sendBtn").disabled = false;
+  };
+  if (state.api.on && state.api.key) {
+    apiReply(text).then(done).catch(function() {
+      pushBot("(网络出了点小状况，先用老方式陪你聊～)");
+      fail();
+    });
+  } else {
+    var delay = 500 + Math.random() * 800;
+    setTimeout(function() { done(offlineReply(text)); }, delay);
+  }
+}
+document.getElementById("sendBtn").onclick = send;
+document.getElementById("ipt").addEventListener("keydown", function(e) {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+document.getElementById("ipt").addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 100) + "px";
+});
+
+/* ---------- 心情打卡 ---------- */
+var MOODS = [
+  { e:"😊", t:"开心" }, { e:"🙂", t:"还好" }, { e:"😌", t:"平静" },
+  { e:"😢", t:"难过" }, { e:"😠", t:"烦躁" }, { e:"😵", t:"疲惫" }
+];
+var selMood = -1;
+function renderMood() {
+  var grid = document.getElementById("moodGrid");
+  grid.innerHTML = "";
+  MOODS.forEach(function(m, i) {
+    var b = document.createElement("button");
+    b.textContent = m.e;
+    b.title = m.t;
+    if (i === selMood) b.classList.add("sel");
+    b.onclick = function() {
+      selMood = i;
+      Array.prototype.forEach.call(grid.children, function(c){ c.classList.remove("sel"); });
+      b.classList.add("sel");
+    };
+    grid.appendChild(b);
+  });
+  var list = document.getElementById("moodList");
+  var recs = LS.get("moods", []);
+  list.innerHTML = "";
+  if (!recs.length) {
+    list.innerHTML = '<div class="empty-tip">还没有记录，今天就是第一个吧 🌱</div>';
+    return;
+  }
+  recs.slice(-30).reverse().forEach(function(r) {
+    var d = document.createElement("div");
+    d.className = "mood-item";
+    var emoji = (MOODS[r.m] && MOODS[r.m].e) || "🙂";
+    var name = (MOODS[r.m] && MOODS[r.m].t) || "";
+    d.innerHTML = '<div class="mi-emoji">' + emoji + '</div><div><div class="mi-date">' + r.d + " · " + name + '</div><div class="mi-note"></div></div>';
+    d.querySelector(".mi-note").textContent = r.n || "";
+    list.appendChild(d);
+  });
+}
+document.getElementById("moodSave").onclick = function() {
+  if (selMood < 0) { alert("先选一个心情表情哦～"); return; }
+  var d = new Date();
+  var ds = d.getFullYear() + "-" + ("0"+(d.getMonth()+1)).slice(-2) + "-" + ("0"+d.getDate()).slice(-2);
+  var recs = LS.get("moods", []);
+  recs.push({ d: ds, m: selMood, n: document.getElementById("moodNote").value.trim(), ts: Date.now() });
+  LS.set("moods", recs);
+  document.getElementById("moodNote").value = "";
+  var moodNow = selMood;
+  selMood = -1;
+  renderMood();
+  /* 按心情给一句陪伴回应 */
+  var care = { 0:"今天心情不错呀，要保持哦，{n}！🎉", 1:"平稳也是好日子，{n}，慢慢来", 2:"平静的日子里也要记得好好吃饭好好睡觉呀，{n}", 3:"{n}，今天的难过我都记下了。想说的时候随时找我，我在", 4:"烦躁的时候，{n}，出去走走或者洗个热水澡，我陪你慢慢消化", 5:"{n}辛苦了，早点休息，明天我陪你重新出发" };
+  setTimeout(function() { pushBot(fillT(care[moodNow !== -1 ? moodNow : 2])); }, 300);
+  document.getElementById("moodSave").textContent = "已记下 ✅ 我去找" + (state.botName || "TA") + "聊聊";
+  setTimeout(function(){ document.getElementById("moodSave").textContent = "记下这一刻"; }, 2500);
+};
+
+/* ---------- 标签页 ---------- */
+Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(b) {
+  b.onclick = function() {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){ x.classList.remove("on"); });
+    b.classList.add("on");
+    Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
+    document.getElementById(b.dataset.tab).classList.add("show");
+    if (b.dataset.tab === "page-mood") renderMood();
+    if (b.dataset.tab === "page-set") fillSettings();
+  };
+});
+
+/* ---------- 设置 ---------- */
+function fillSettings() {
+  document.getElementById("setRole").value = state.role || "guimi";
+  document.getElementById("setBotName").value = state.botName || "";
+  document.getElementById("setNick").value = state.nick || "";
+  document.getElementById("setPersona").value = state.persona || "";
+  document.getElementById("apiSwitch").classList.toggle("on", !!state.api.on);
+  document.getElementById("apiUrl").value = state.api.url || "";
+  document.getElementById("apiKey").value = state.api.key || "";
+  document.getElementById("apiModel").value = state.api.model || "";
+}
+document.getElementById("setSave").onclick = function() {
+  state.role = document.getElementById("setRole").value;
+  state.botName = document.getElementById("setBotName").value.trim() || ROLES[state.role].defName;
+  state.nick = document.getElementById("setNick").value.trim() || "宝";
+  state.persona = document.getElementById("setPersona").value.trim();
+  LS.set("role", state.role); LS.set("botName", state.botName);
+  LS.set("nick", state.nick); LS.set("persona", state.persona);
+  applyIdentity();
+  alert("已保存 ✅ 新身份即刻生效");
+};
+document.getElementById("apiSwitch").onclick = function() {
+  this.classList.toggle("on");
+};
+document.getElementById("apiSave").onclick = function() {
+  state.api = {
+    on: document.getElementById("apiSwitch").classList.contains("on"),
+    url: document.getElementById("apiUrl").value.trim(),
+    key: document.getElementById("apiKey").value.trim(),
+    model: document.getElementById("apiModel").value.trim()
+  };
+  LS.set("api", state.api);
+  alert("AI 设置已保存 ✅" + (state.api.on ? "（联网模式已开启）" : "（当前为离线模式）"));
+};
+document.getElementById("btnClearChat").onclick = function() {
+  if (!confirm("确定清空所有聊天记录吗？此操作不可恢复。")) return;
+  state.msgs = []; LS.set("msgs", []);
+  renderMsgs();
+  pushBot(greeting(state.role, state.nick, state.botName));
+};
+document.getElementById("btnReset").onclick = function() {
+  if (!confirm("确定重置全部数据吗？聊天记录、心情记录、身份设定都会被删除。")) return;
+  ["role","botName","nick","persona","msgs","moods","api"].forEach(function(k){ LS.del(k); });
+  location.reload();
+};
+
+/* ---------- 启动 ---------- */
+renderOnboarding();
+if (state.role) startApp(false);
+</script>
+</body>
+</html>
