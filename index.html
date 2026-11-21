@@ -49,8 +49,9 @@
   .ob-hint { font-size:12px; color:#b59aa5; text-align:center; margin-top:12px; line-height:1.6; }
 
   /* 主框架 */
-  #app { display:none; height:100%; flex-direction:column; }
+  #app { display:none; height:100%; flex-direction:column; position:relative; }
   #app.show { display:flex; }
+  #app.in-chat .tabbar { display:none; }
   .page { display:none; flex:1; overflow:hidden; flex-direction:column; min-height:0; }
   .page.show { display:flex; }
   .scroll-page { overflow-y:auto; padding:calc(16px + env(safe-area-inset-top)) 18px 18px; }
@@ -62,7 +63,56 @@
   .tabbar button .t-ico { font-size:20px; }
   .tabbar button.on { color:#e0577f; font-weight:600; }
 
+  /* 消息列表（首页）：每个角色一个独立对话框，类似微信会话列表 */
+  .home-head {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:calc(14px + env(safe-area-inset-top)) 18px 12px; flex-shrink:0;
+  }
+  .hh-title { font-size:22px; font-weight:700; letter-spacing:.5px; }
+  .hh-sub { font-size:11px; color:#b59aa5; margin-top:3px; }
+  .hh-add {
+    width:36px; height:36px; border-radius:50%; border:none; font-size:21px; line-height:1;
+    color:#fff; background:linear-gradient(135deg,#ff8fab,#ff6b8f);
+    box-shadow:0 4px 12px rgba(255,107,143,.3); flex-shrink:0;
+  }
+  #sessionList { flex:1; overflow-y:auto; min-height:0; background:#fff; }
+  .sess {
+    display:flex; align-items:center; gap:12px; padding:12px 16px;
+    border-bottom:1px solid #f8eef2; cursor:pointer;
+  }
+  .sess:active { background:#fff5f8; }
+  .s-av {
+    position:relative; width:48px; height:48px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:24px;
+    background:linear-gradient(135deg,#ffd6e2,#ffe9f0);
+  }
+  .s-badge {
+    position:absolute; top:-3px; right:-3px; min-width:18px; height:18px; padding:0 5px;
+    border-radius:9px; background:#ff4d6d; color:#fff; font-size:11px; line-height:18px;
+    text-align:center; box-shadow:0 0 0 2px #fff;
+  }
+  .s-main { flex:1; min-width:0; }
+  .s-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .s-name { font-size:16px; font-weight:600; color:#3d3038; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .s-time { font-size:11px; color:#bdaab2; flex-shrink:0; }
+  .s-msg {
+    font-size:13px; color:#9c8a92; margin-top:4px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .s-msg .pre { color:#c9b6be; }
+  .s-none { text-align:center; color:#b59aa5; font-size:13px; padding:48px 28px; line-height:2; }
+
   /* 聊天 */
+  #page-chat {
+    position:absolute; top:0; left:0; right:0; bottom:0; z-index:30;
+    background:#fdf6f8; flex-direction:column;
+  }
+  #page-chat.show { display:flex; animation:slideIn .22s ease-out; }
+  @keyframes slideIn { from { transform:translateX(26px); opacity:.35; } to { transform:none; opacity:1; } }
+  .back-btn {
+    width:30px; height:34px; border:none; background:none; padding:0 0 3px 0;
+    font-size:27px; line-height:1; color:#e0577f; flex-shrink:0;
+  }
   .chat-head {
     background:rgba(255,255,255,.92); backdrop-filter:blur(8px);
     padding:calc(10px + env(safe-area-inset-top)) 16px 10px;
@@ -196,14 +246,27 @@
     <textarea id="obPersona" placeholder="例如：认识十年的老朋友，说话直接但很暖，爱开玩笑，总能看出我情绪不对劲"></textarea>
   </div>
   <button class="ob-btn" id="obStart">开始陪伴 →</button>
-  <div class="ob-hint">之后可在「设置」或点左上角头像切换角色<br>8 种角色，各自独立聊天记录与记忆</div>
+  <div class="ob-hint">之后想加别的角色，在「消息」页右上角点「＋」<br>每个角色一个独立对话框，聊天记录与记忆互不打扰</div>
 </div>
 
 <!-- 主界面 -->
 <div id="app">
-  <!-- 聊天 -->
-  <div class="page show" id="page-chat">
+  <!-- 消息列表：一个角色一个对话框 -->
+  <div class="page show" id="page-home">
+    <div class="home-head">
+      <div>
+        <div class="hh-title">消息</div>
+        <div class="hh-sub" id="hhSub">每个角色一个独立对话框</div>
+      </div>
+      <button class="hh-add" id="btnAddRole">＋</button>
+    </div>
+    <div id="sessionList"></div>
+  </div>
+
+  <!-- 聊天（进入后全屏覆盖，带返回） -->
+  <div class="page" id="page-chat">
     <div class="chat-head">
+      <button class="back-btn" id="chatBack">‹</button>
       <button class="avatar" id="headAvatar">💕</button>
       <div>
         <div class="c-name" id="headName">小暖</div>
@@ -247,8 +310,8 @@
     <div class="sec-sub">所有数据只保存在本机</div>
 
     <div class="set-card">
-      <h3>身份设定（当前角色）</h3>
-      <div class="set-row"><label>角色</label>
+      <h3 id="setCardTitle">身份设定</h3>
+      <div class="set-row"><label>要编辑的角色</label>
         <select id="setRole"></select>
       </div>
       <div class="set-row"><label>TA 的名字</label><input id="setBotName"></div>
@@ -280,7 +343,7 @@
     </div>
 
     <div class="set-card">
-      <h3>TA 的记忆本（当前角色）🧠</h3>
+      <h3 id="memCardTitle">TA 的记忆本 🧠</h3>
       <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6;margin-bottom:8px">
         AI 模式下 TA 会自己调用「记忆」工具写入；也可以手动补充。每个角色各有一本，互不串台。
       </div>
@@ -309,29 +372,29 @@
         <button class="btn-plain" id="btnBackup">导出备份</button>
         <button class="btn-plain" id="btnRestore">导入备份</button>
       </div>
-      <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnClearChat">清空当前角色聊天</button></div>
+      <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnClearChat">清空当前对话框的聊天</button></div>
       <div class="set-row" style="margin-top:10px"><button class="btn-plain" id="btnTrim">清理旧聊天（每角色留最近 150 条）</button></div>
       <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnReset">重置全部数据</button></div>
       <div id="storageInfo" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px"></div>
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.5 · 多角色情感陪伴智能体<br>本机数据库存聊天 · 长期记忆 · 工具调用 · 加密备份 · 离线可用</div>
+    <div class="ver-tip">暖语 v1.6 · 多角色情感陪伴智能体<br>消息列表 · 每个角色独立对话框 · 长期记忆 · 加密备份</div>
   </div>
 
   <div class="tabbar">
-    <button class="on" data-tab="page-chat"><span class="t-ico">💬</span>聊天</button>
+    <button class="on" data-tab="page-home"><span class="t-ico">💬</span>消息</button>
     <button data-tab="page-mood"><span class="t-ico">🌈</span>心情</button>
     <button data-tab="page-remind"><span class="t-ico">⏰</span>提醒</button>
     <button data-tab="page-set"><span class="t-ico">⚙️</span>设置</button>
   </div>
 </div>
 
-<!-- 角色面板 -->
+<!-- 角色面板（添加 / 打开对话框） -->
 <div id="roleSheet">
   <div class="rs-body">
-    <div class="rs-title">切换角色</div>
-    <div class="rs-sub">每个角色拥有独立的聊天记录与记忆本，互不影响</div>
+    <div class="rs-title">选择角色</div>
+    <div class="rs-sub">点一个角色就开一个独立对话框，各自的聊天记录和记忆互不影响</div>
     <div class="rs-grid" id="rsGrid"></div>
     <button class="btn-plain rs-close" id="rsClose">关闭</button>
   </div>
@@ -617,9 +680,42 @@ var state = {
   lastNight: LS.get("lastNight", ""),
   voice: LS.get("voice", false),
   reminders: LS.get("reminders", []),
+  /* 会话列表：每个角色一个对话框 */
+  active: LS.get("active", null),
+  lastMsg: LS.get("lastMsg", {}),
+  unread: LS.get("unread", {}),
+  editRole: null,
   lastEmo: null, lastEmoCount: 0, selMood: -1, busy: false
 };
 if (!state.api.model) state.api.model = API_DEFAULT_MODEL;
+
+/* ---------- 会话列表初始化 ----------
+ * active = 已经在消息列表里的角色（一个角色 = 一个对话框）
+ * lastMsg = 每个对话框的最后一条消息（用于列表预览，避免为了预览去加载全部聊天）
+ * unread  = 未读数
+ */
+var chatOpen = false;
+(function initSessions() {
+  var list = state.active;
+  if (!Array.isArray(list)) list = [];
+  list = list.filter(function(k){ return !!ROLES[k]; });
+  /* 老版本没有 active：把当前角色作为第一个对话框 */
+  if (!list.length && state.cur && ROLES[state.cur]) list = [state.cur];
+  state.active = list;
+  LS.set("active", state.active);
+
+  if (!state.lastMsg || typeof state.lastMsg !== "object") state.lastMsg = {};
+  if (!state.unread || typeof state.unread !== "object") state.unread = {};
+  /* 老版本升级：没有预览数据时，用已加载的聊天补一份 */
+  state.active.forEach(function(k){
+    if (state.lastMsg[k] && state.lastMsg[k].ts) return;
+    var arr = state.chats[k] || [];
+    if (arr.length) {
+      var m = arr[arr.length - 1];
+      state.lastMsg[k] = { r: m.role, t: m.text, ts: m.ts };
+    }
+  });
+})();
 
 /* ---------- API Key：不落本地明文 ----------
  * App 内：交给 AndroidKeyStore 加密保存（网页只持有一个内存副本）
@@ -776,17 +872,26 @@ document.getElementById("obStart").onclick = function() {
   var persona = document.getElementById("obPersona").value.trim() || r.persona;
   state.cur = selRole;
   state.profiles[selRole] = { botName:botName, nick:nick, persona:persona };
+  state.active = [selRole];
+  LS.set("active", state.active);
   LS.set("cur", selRole); saveProfiles();
   startApp(true);
+  openChat(selRole);
 };
 
 /* ---------- 启动 ---------- */
 function startApp(first) {
   document.getElementById("onboarding").style.display = "none";
   document.getElementById("app").classList.add("show");
-  applyIdentity();
-  renderMsgs();
-  if (!CH().length) setTimeout(openGreeting, 400);
+  chatOpen = false;
+  /* 默认停在消息列表，不直接钻进某个人的聊天 */
+  Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
+  document.getElementById("page-home").classList.add("show");
+  document.getElementById("app").classList.remove("in-chat");
+  Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){
+    x.classList.toggle("on", x.dataset.tab === "page-home");
+  });
+  renderSessions();
   renderMood(); renderReminders(); fillSettings();
 }
 function applyIdentity() {
@@ -850,18 +955,25 @@ function renderMsgs() {
   }
   for (var i = start; i < arr.length; i++) addMsgEl(arr[i].role, arr[i].text, arr[i].ts);
 }
-function pushUser(text) {
+function pushUser(text, role) {
+  role = role || state.cur;
   var ts = Date.now();
   var msg = {role:"user", text:text, ts:ts};
-  CH().push(msg); persistMsg(state.cur, msg);
-  addMsgEl("user", text, ts);
+  CH(role).push(msg); persistMsg(role, msg);
+  touchSession(role, msg);
+  if (chatOpen && role === state.cur) addMsgEl("user", text, ts);
 }
-function pushBot(text) {
+function pushBot(text, role) {
+  role = role || state.cur;
   var ts = Date.now();
   var msg = {role:"bot", text:text, ts:ts};
-  CH().push(msg); persistMsg(state.cur, msg);
-  addMsgEl("bot", text, ts);
-  speak(text);
+  CH(role).push(msg); persistMsg(role, msg);
+  touchSession(role, msg);
+  /* 只在「正开着这个角色的聊天窗口」时才画气泡、才播报，避免回复串到别人的对话框 */
+  if (chatOpen && role === state.cur) {
+    addMsgEl("bot", text, ts);
+    speak(text);
+  }
   return text;
 }
 function showTyping() {
@@ -885,8 +997,9 @@ function detectEmotion(text) {
   return best || "neu";
 }
 /* 离线模式也会"记得你"：关键词命中时必提，其余情况按概率顺手提一句 */
-function memoryFlavor(text, force) {
-  var mem = MEM();
+function memoryFlavor(text, force, role) {
+  role = role || state.cur;
+  var mem = MEM(role);
   if (!mem.length) return "";
   var hit = null;
   if (text) {
@@ -900,36 +1013,38 @@ function memoryFlavor(text, force) {
   if (force || Math.random() < 0.28) return "（我还记着你" + String(pick(mem)).replace(/^我/, "") + "，都记在小本本上呢）";
   return "";
 }
-function offlineReply(text) {
+function offlineReply(text, roleKey) {
+  var roleId = roleKey || state.cur;
   var emo = detectEmotion(text);
   if (emo === state.lastEmo) state.lastEmoCount++; else { state.lastEmo = emo; state.lastEmoCount = 1; }
-  var role = ROLES[state.cur] || ROLES.guimi;
+  var role = ROLES[roleId] || ROLES.guimi;
   var out;
   if (state.lastEmoCount>=2 && emo!=="hap" && emo!=="neu") {
-    out = fillT(pick(role.deep)) + "\n" + pick(FOLLOWUPS);
+    out = fillT(pick(role.deep), roleId) + "\n" + pick(FOLLOWUPS);
   } else if (emo==="tir" && (new Date().getHours()>=23 || new Date().getHours()<5)) {
-    out = fillT(pick(NIGHT_CARE));
+    out = fillT(pick(NIGHT_CARE), roleId);
   } else {
-    out = fillT(pick(role.resp[emo] || role.resp.neu));
+    out = fillT(pick(role.resp[emo] || role.resp.neu), roleId);
     if (emo!=="neu" && Math.random()<0.55) out += "\n" + pick(FOLLOWUPS);
   }
-  var mf = memoryFlavor(text);
+  var mf = memoryFlavor(text, false, roleId);
   if (mf) out += "\n" + mf;
   return out;
 }
 
 /* ---------- 记忆抽取 ---------- */
-function extractFacts(text) {
+function extractFacts(text, roleKey) {
+  var roleId = roleKey || state.cur;
   var found = [], added = [];
   [/我喜欢([^，。！？,.!?~\s]{1,20})/g, /我生日(?:是|在)?([^，。！？,.!?~\s]{1,12})/g,
    /我在(?:准备|学|做|练)([^，。！？,.!?~\s]{1,20})/g, /我最近(?:在|很|有点)([^，。！？,.!?~\s]{1,15})/g].forEach(function(re){
     var m; while ((m = re.exec(text)) !== null) { if (m[0].length>=4 && found.indexOf(m[0])<0) found.push(m[0]); }
   });
   found.forEach(function(f){
-    var dup = MEM().some(function(x){ return x.indexOf(f)>=0 || f.indexOf(x)>=0; });
-    if (!dup) { MEM().push(f); added.push(f); }
+    var dup = MEM(roleId).some(function(x){ return x.indexOf(f)>=0 || f.indexOf(x)>=0; });
+    if (!dup) { MEM(roleId).push(f); added.push(f); }
   });
-  if (added.length) { state.mems[state.cur] = MEM().slice(-60); saveMems(); }
+  if (added.length) { state.mems[roleId] = MEM(roleId).slice(-60); saveMems(); }
   return added;
 }
 
@@ -937,14 +1052,15 @@ function extractFacts(text) {
 function apiBase() { return (state.api.url || API_DEFAULT_URL).replace(/\/+$/,""); }
 function modelName() { return state.api.model || API_DEFAULT_MODEL; }
 
-function buildSys() {
-  var r = ROLES[state.cur] || ROLES.guimi;
-  var p = P();
+function buildSys(roleKey) {
+  var roleId = roleKey || state.cur;
+  var r = ROLES[roleId] || ROLES.guimi;
+  var p = P(roleId);
   var d = new Date();
   var wd = ["日","一","二","三","四","五","六"][d.getDay()];
-  var mem = MEM();
+  var mem = MEM(roleId);
   var memTxt = mem.length ? "\n【长期记忆（关于对方的真实信息）】\n- " + mem.join("\n- ") + "\n可以自然运用，但不要机械复述。" : "";
-  var sum = state.summaries[state.cur];
+  var sum = state.summaries[roleId];
   var sumTxt = sum ? "\n【更早的对话摘要】" + sum : "";
   var ann = annivLines();
   var annTxt = ann.length ? "\n【纪念日情境】" + ann.join("；") : "";
@@ -983,8 +1099,9 @@ var TOOLS = [
 function headers() {
   return { "Content-Type":"application/json", "Authorization":"Bearer " + state.api.key };
 }
-function historyFor() {
-  return CH().slice(-12).map(function(m){ return { role: m.role==="user" ? "user" : "assistant", content: m.text }; });
+function historyFor(roleKey) {
+  var roleId = roleKey || state.cur;
+  return CH(roleId).slice(-12).map(function(m){ return { role: m.role==="user" ? "user" : "assistant", content: m.text }; });
 }
 
 /* 流式对话 */
@@ -1038,18 +1155,19 @@ function toolChat(messages) {
 }
 
 /* 执行工具 */
-function runTool(name, args) {
+function runTool(name, args, roleKey) {
+  var roleId = roleKey || state.cur;
   if (name === "add_reminder") {
     var title = (args.title || "提醒").slice(0, 40);
     var ts = parseDateTime(args.datetime);
     if (!ts) return "时间格式无法识别，请用 YYYY-MM-DD HH:mm";
-    addReminder(title, ts, true);
+    addReminder(title, ts, true, roleId);
     return "已设置提醒：" + title + "，时间 " + new Date(ts).toLocaleString("zh-CN");
   }
   if (name === "save_memory") {
     var fact = (args.fact || "").slice(0, 60);
     if (!fact) return "内容为空";
-    if (!MEM().some(function(x){ return x===fact; })) { MEM().push(fact); state.mems[state.cur] = MEM().slice(-60); saveMems(); }
+    if (!MEM(roleId).some(function(x){ return x===fact; })) { MEM(roleId).push(fact); state.mems[roleId] = MEM(roleId).slice(-60); saveMems(); }
     return "已记住：" + fact;
   }
   return "未知工具";
@@ -1063,8 +1181,9 @@ function parseDateTime(s) {
 }
 
 /* 智能体主流程 */
-function agentReply(text) {
-  var msgs = [{ role:"system", content: buildSys() }].concat(historyFor());
+function agentReply(text, roleKey) {
+  var roleId = roleKey || state.cur;
+  var msgs = [{ role:"system", content: buildSys(roleId) }].concat(historyFor(roleId));
   msgs.push({ role:"user", content: text });
   var round = 0;
   function step() {
@@ -1075,7 +1194,7 @@ function agentReply(text) {
         m.tool_calls.forEach(function(tc){
           var args = {};
           try { args = JSON.parse(tc.function.arguments || "{}"); } catch(e) {}
-          var result = runTool(tc.function.name, args);
+          var result = runTool(tc.function.name, args, roleId);
           msgs.push({ role:"tool", tool_call_id: tc.id, content: result });
         });
         return step();
@@ -1087,10 +1206,11 @@ function agentReply(text) {
 }
 
 /* 摘要压缩：只生成"更早对话"的摘要喂给模型，原始消息一条都不删 */
-function maybeSummarize() {
+function maybeSummarize(roleKey) {
+  var roleId = roleKey || state.cur;
   if (!state.api.on || !state.api.key) return;
-  var done = state.summaryDone[state.cur] || 0;
-  var arr = CH();
+  var done = state.summaryDone[roleId] || 0;
+  var arr = CH(roleId);
   if (arr.length - done < 40) return;
   var slice = arr.slice(done, done + 30);
   var oldText = slice.map(function(m){ return (m.role==="user"?"对方：":"我：") + m.text; }).join("\n");
@@ -1102,10 +1222,10 @@ function maybeSummarize() {
   }).then(function(r){ return r.json(); }).then(function(j){
     var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     if (!c) return;
-    var prev = state.summaries[state.cur];
-    state.summaries[state.cur] = (prev ? prev + " " : "") + c.trim();
-    if (state.summaries[state.cur].length > 600) state.summaries[state.cur] = state.summaries[state.cur].slice(-600);
-    state.summaryDone[state.cur] = done + 30;
+    var prev = state.summaries[roleId];
+    state.summaries[roleId] = (prev ? prev + " " : "") + c.trim();
+    if (state.summaries[roleId].length > 600) state.summaries[roleId] = state.summaries[roleId].slice(-600);
+    state.summaryDone[roleId] = done + 30;
     LS.set("summaries", state.summaries);
     LS.set("summaryDone", state.summaryDone);
   }).catch(function(){});
@@ -1116,34 +1236,36 @@ function send() {
   var ipt = document.getElementById("ipt");
   var text = ipt.value.trim();
   if (!text || state.busy) return;
+  /* 锁定当前对话框：即使回复慢、中途切到别的角色，这条回复也只回到这里 */
+  var role = state.cur;
   ipt.value = ""; ipt.style.height = "auto";
   state.busy = true;
   document.getElementById("sendBtn").disabled = true;
-  pushUser(text);
+  pushUser(text, role);
 
   var m = text.match(/我(?:叫|是)(.{1,8}?)[，。！？.!~\s$]|我(?:叫|是)(.{1,8})$/);
   if (m && (m[1] || m[2]) && text.length <= 20) {
     var nn = (m[1] || m[2]).trim();
     if (nn && nn.length <= 8 && nn.indexOf("你") !== 0) {
-      P().nick = nn; saveProfiles();
-      pushBot("好呀，那我以后就叫你" + nn + "啦，这个名字我喜欢～");
+      P(role).nick = nn; saveProfiles();
+      pushBot("好呀，那我以后就叫你" + nn + "啦，这个名字我喜欢～", role);
       done();
       return;
     }
   }
 
-  var facts = extractFacts(text);
+  var facts = extractFacts(text, role);
   showTyping();
 
   function finish(reply) {
     hideTyping();
-    if (reply) pushBot(reply);
+    if (reply) pushBot(reply, role);
     if (facts.length) {
       var ack = facts; facts = [];
-      pushBot("（悄悄记进了我的小本本：「" + ack.join("；") + "」，我会记住的～）📝");
+      pushBot("（悄悄记进了我的小本本：「" + ack.join("；") + "」，我会记住的～）📝", role);
     }
     done();
-    maybeSummarize();
+    maybeSummarize(role);
   }
   function done() {
     state.busy = false;
@@ -1153,12 +1275,14 @@ function send() {
   if (state.api.on && state.api.key) {
     var isToolIntent = /(提醒我|帮我记|记住|别忘|日程|定时|叫我)/.test(text);
     if (isToolIntent) {
-      agentReply(text).then(finish).catch(function(){ finish(offlineReply(text)); });
+      agentReply(text, role).then(finish).catch(function(){ finish(offlineReply(text, role)); });
     } else {
       var bubble = null;
-      var msgs = [{ role:"system", content: buildSys() }].concat(historyFor());
+      var msgs = [{ role:"system", content: buildSys(role) }].concat(historyFor(role));
       msgs.push({ role:"user", content: text });
       streamChat(msgs, function(partial){
+        /* 已经离开这个对话框就不再画流式气泡，回复仍会完整存进它的记录 */
+        if (!chatOpen || state.cur !== role) return;
         if (!bubble) {
           hideTyping();
           bubble = addMsgEl("bot", partial, Date.now());
@@ -1172,11 +1296,11 @@ function send() {
         finish(full);
       }).catch(function(){
         if (bubble) bubble.remove();
-        finish("（网络有点小状况，我先用老方式陪你聊～\n" + offlineReply(text) + "）");
+        finish("（网络有点小状况，我先用老方式陪你聊～\n" + offlineReply(text, role) + "）");
       });
     }
   } else {
-    setTimeout(function(){ finish(offlineReply(text)); }, 500 + Math.random()*700);
+    setTimeout(function(){ finish(offlineReply(text, role)); }, 500 + Math.random()*700);
   }
 }
 document.getElementById("sendBtn").onclick = send;
@@ -1189,16 +1313,17 @@ document.getElementById("ipt").addEventListener("input", function(){
 });
 
 /* ---------- 提醒 ---------- */
-function addReminder(title, ts, fromTool) {
+function addReminder(title, ts, fromTool, roleKey) {
+  var roleId = roleKey || state.cur;
   var id = "r" + Date.now() + Math.floor(Math.random()*1000);
-  state.reminders.push({ id:id, title:title, ts:ts });
+  state.reminders.push({ id:id, title:title, ts:ts, role: roleId });
   state.reminders.sort(function(a,b){ return a.ts - b.ts; });
   LS.set("reminders", state.reminders);
   renderReminders();
   if (window.AndroidBridge && window.AndroidBridge.scheduleReminder) {
     try { window.AndroidBridge.scheduleReminder(id, "暖语提醒", title, String(ts)); } catch(e) {}
   }
-  if (!fromTool) pushBot("好的，我记下了：「" + title + "」，" + new Date(ts).toLocaleString("zh-CN") + " 我会提醒你 ⏰");
+  if (!fromTool) pushBot("好的，我记下了：「" + title + "」，" + new Date(ts).toLocaleString("zh-CN") + " 我会提醒你 ⏰", roleId);
 }
 function renderReminders() {
   var list = document.getElementById("rmList");
@@ -1278,6 +1403,8 @@ document.getElementById("moodSave").onclick = function() {
 
 /* ---------- 设置 ---------- */
 function fillSettings() {
+  var ek = state.editRole || state.cur;
+  if (!ROLES[ek]) ek = Object.keys(ROLES)[0];
   var sel = document.getElementById("setRole");
   sel.innerHTML = "";
   Object.keys(ROLES).forEach(function(k){
@@ -1285,8 +1412,12 @@ function fillSettings() {
     o.value = k; o.textContent = ROLES[k].emoji + " " + ROLES[k].label;
     sel.appendChild(o);
   });
-  sel.value = state.cur;
-  var p = P();
+  sel.value = ek;
+  var p = P(ek);
+  var t1 = document.getElementById("setCardTitle");
+  if (t1) t1.textContent = "身份设定 · " + p.botName;
+  var t2 = document.getElementById("memCardTitle");
+  if (t2) t2.textContent = p.botName + " 的记忆本 🧠";
   document.getElementById("setBotName").value = p.botName;
   document.getElementById("setNick").value = p.nick;
   document.getElementById("setPersona").value = p.persona;
@@ -1300,7 +1431,7 @@ function fillSettings() {
     : "sk-...";
   document.getElementById("apiModel").value = state.api.model || API_DEFAULT_MODEL;
   document.getElementById("voiceSwitch").classList.toggle("on", !!state.voice);
-  document.getElementById("memBox").value = MEM().join("\n");
+  document.getElementById("memBox").value = MEM(ek).join("\n");
   document.getElementById("nightSwitch").classList.toggle("on", !!state.night.on);
   document.getElementById("nightTime").value = state.night.time || "22:30";
   renderAnniv();
@@ -1321,15 +1452,21 @@ function updateStorageInfo() {
   }
 }
 document.getElementById("setRole").onchange = function() {
-  switchRole(this.value);
+  /* 这里只切换「要编辑哪个角色」，不会打断你正在进行的对话 */
+  state.editRole = this.value;
+  fillSettings();
 };
 document.getElementById("setSave").onclick = function() {
-  var p = P();
-  p.botName = document.getElementById("setBotName").value.trim() || ROLES[state.cur].defName;
-  p.nick = document.getElementById("setNick").value.trim() || ROLES[state.cur].call;
-  p.persona = document.getElementById("setPersona").value.trim() || ROLES[state.cur].persona;
-  saveProfiles(); applyIdentity();
-  alert("已保存 ✅");
+  var k = state.editRole || state.cur;
+  var p = P(k);
+  p.botName = document.getElementById("setBotName").value.trim() || ROLES[k].defName;
+  p.nick = document.getElementById("setNick").value.trim() || ROLES[k].call;
+  p.persona = document.getElementById("setPersona").value.trim() || ROLES[k].persona;
+  saveProfiles();
+  fillSettings();
+  renderSessions();
+  if (k === state.cur) applyIdentity();
+  alert("已保存「" + p.botName + "」的身份设定 ✅");
 };
 document.getElementById("apiSwitch").onclick = function(){ this.classList.toggle("on"); };
 document.getElementById("voiceSwitch").onclick = function(){ this.classList.toggle("on"); };
@@ -1379,10 +1516,11 @@ document.getElementById("btnTrim").onclick = function() {
   alert("已清理");
 };
 document.getElementById("memSave").onclick = function() {
+  var k = state.editRole || state.cur;
   var lines = document.getElementById("memBox").value.split("\n").map(function(s){ return s.trim(); }).filter(function(s){ return s; });
-  state.mems[state.cur] = lines.slice(0, 60);
+  state.mems[k] = lines.slice(0, 60);
   saveMems();
-  alert("记忆本已保存 ✅");
+  alert("「" + P(k).botName + "」的记忆本已保存 ✅");
 };
 function renderAnniv() {
   var list = document.getElementById("annivList");
@@ -1432,9 +1570,10 @@ function exportData() {
   /* 聊天存在原生库时是按角色懒加载的，导出前先把所有角色取齐 */
   if (NATIVE_CHAT) Object.keys(ROLES).forEach(nativeLoadRole);
   var data = {
-    v: "1.5", at: Date.now(),
+    v: "1.6", at: Date.now(),
     cur: state.cur, profiles: state.profiles, chats: state.chats, mems: state.mems,
     summaries: state.summaries, summaryDone: state.summaryDone, moods: state.moods, anniv: state.anniv,
+    active: state.active, lastMsg: state.lastMsg,
     /* 只导出接口地址与模型名，不导出 API Key（安全考虑） */
     api: { on: state.api.on, url: state.api.url, model: state.api.model },
     night: state.night, reminders: state.reminders
@@ -1598,6 +1737,22 @@ function applyBackup(d) {
   if (d.api) { state.api.url = d.api.url || ""; state.api.model = d.api.model || API_DEFAULT_MODEL; }
   if (d.cur) state.cur = d.cur;
 
+  /* 会话列表：优先用备份里的；老备份没有的话，按有聊天的角色重建 */
+  if (Array.isArray(d.active) && d.active.length) {
+    state.active = d.active.filter(function(k){ return !!ROLES[k]; });
+  } else {
+    state.active = Object.keys(state.chats).filter(function(k){ return !!ROLES[k]; });
+  }
+  if (!state.active.length && state.cur && ROLES[state.cur]) state.active = [state.cur];
+  state.lastMsg = (d.lastMsg && typeof d.lastMsg === "object") ? d.lastMsg : {};
+  state.active.forEach(function(k){
+    if (state.lastMsg[k] && state.lastMsg[k].ts) return;
+    var arr = state.chats[k] || [];
+    if (arr.length) { var lm = arr[arr.length - 1]; state.lastMsg[k] = { r: lm.role, t: lm.text, ts: lm.ts }; }
+  });
+  state.unread = {};
+  LS.set("active", state.active); LS.set("lastMsg", state.lastMsg); LS.set("unread", state.unread);
+
   LS.set("profiles", state.profiles); LS.set("memories", state.mems);
   LS.set("summaries", state.summaries); LS.set("summaryDone", state.summaryDone);
   LS.set("moods", state.moods); LS.set("anniv", state.anniv);
@@ -1680,56 +1835,251 @@ document.getElementById("mdImport").onclick = function() {
 };
 document.getElementById("mdClose").onclick = function(){ document.getElementById("modal").classList.remove("show"); };
 document.getElementById("btnClearChat").onclick = function() {
-  if (!confirm("清空当前角色的聊天记录？（记忆本不受影响）")) return;
-  state.chats[state.cur] = []; saveChats(); renderMsgs();
+  var p = P();
+  if (!confirm("清空和「" + p.botName + "」的聊天记录？（记忆本不受影响）")) return;
+  state.chats[state.cur] = []; saveChats();
+  delete state.lastMsg[state.cur]; LS.set("lastMsg", state.lastMsg);
+  state.unread[state.cur] = 0; LS.set("unread", state.unread);
+  renderMsgs(); renderSessions();
 };
 document.getElementById("btnReset").onclick = function() {
   if (!confirm("重置全部数据？聊天、记忆、心情、提醒、身份都会被删除。")) return;
-  ["cur","profiles","chats","memories","summaries","moods","anniv","api","night","lastNight","reminders","voice"].forEach(function(k){ LS.del(k); });
+  ["cur","profiles","chats","memories","summaries","summaryDone","moods","anniv","api","night","lastNight","reminders","voice","active","lastMsg","unread"].forEach(function(k){ LS.del(k); });
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   if (NATIVE_CHAT) { try { window.AndroidBridge.clearAllChats(); } catch(e) {} }
   location.reload();
 };
 
-/* ---------- 角色切换 ---------- */
-function switchRole(k) {
+/* ---------- 会话列表（一个角色 = 一个对话框） ---------- */
+function ensureActive(k) {
+  if (state.active.indexOf(k) === -1) {
+    state.active.push(k);
+    LS.set("active", state.active);
+  }
+}
+function touchSession(role, msg) {
+  state.lastMsg[role] = { r: msg.role, t: msg.text, ts: msg.ts };
+  LS.set("lastMsg", state.lastMsg);
+  /* 不在这个角色的聊天窗口里，才记未读 */
+  if (!(chatOpen && role === state.cur)) {
+    state.unread[role] = (state.unread[role] || 0) + 1;
+    LS.set("unread", state.unread);
+  }
+}
+function lastTs(k) {
+  var m = state.lastMsg[k];
+  return m && m.ts ? m.ts : 0;
+}
+function sessTime(ts) {
+  if (!ts) return "";
+  var d = new Date(ts), n = new Date();
+  if (d.toDateString() === n.toDateString()) return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  var y = new Date(n.getTime() - 86400000);
+  if (d.toDateString() === y.toDateString()) return "昨天";
+  if (d.getFullYear() === n.getFullYear()) return (d.getMonth() + 1) + "月" + d.getDate() + "日";
+  return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate();
+}
+function renderSessions() {
+  var box = document.getElementById("sessionList");
+  box.innerHTML = "";
+  var sub = document.getElementById("hhSub");
+  if (sub) sub.textContent = state.active.length
+    ? ("共 " + state.active.length + " 个对话框 · 长按可移除")
+    : "还没有对话框，点右上角「＋」加一个";
+
+  if (!state.active.length) {
+    var e = document.createElement("div");
+    e.className = "s-none";
+    e.textContent = "点右上角「＋」选一个角色\n开始你的第一段对话吧";
+    e.style.whiteSpace = "pre-line";
+    box.appendChild(e);
+    return;
+  }
+
+  /* 最近聊过的排前面 */
+  var list = state.active.slice().sort(function(a, b){ return lastTs(b) - lastTs(a); });
+  list.forEach(function(k){
+    var r = ROLES[k];
+    if (!r) return;
+    var p = P(k);
+    var m = state.lastMsg[k];
+
+    var item = document.createElement("div");
+    item.className = "sess";
+
+    var av = document.createElement("div");
+    av.className = "s-av";
+    av.textContent = r.emoji;
+    var un = state.unread[k] || 0;
+    if (un > 0) {
+      var badge = document.createElement("span");
+      badge.className = "s-badge";
+      badge.textContent = un > 99 ? "99+" : String(un);
+      av.appendChild(badge);
+    }
+
+    var main = document.createElement("div");
+    main.className = "s-main";
+    var row = document.createElement("div");
+    row.className = "s-row";
+    var nm = document.createElement("span");
+    nm.className = "s-name"; nm.textContent = p.botName;
+    var tm = document.createElement("span");
+    tm.className = "s-time"; tm.textContent = sessTime(m && m.ts);
+    row.appendChild(nm); row.appendChild(tm);
+
+    var msg = document.createElement("div");
+    msg.className = "s-msg";
+    if (m && m.t) {
+      if (m.r === "user") {
+        var pre = document.createElement("span");
+        pre.className = "pre"; pre.textContent = "我：";
+        msg.appendChild(pre);
+      }
+      msg.appendChild(document.createTextNode(String(m.t).replace(/\n+/g, " ")));
+    } else {
+      msg.textContent = "还没有聊过，点开打个招呼吧";
+      msg.style.color = "#c9b6be";
+    }
+    main.appendChild(row); main.appendChild(msg);
+    item.appendChild(av); item.appendChild(main);
+    item.onclick = function(){ openChat(k); };
+
+    /* 长按 / 右键：从列表移除（不删聊天记录和记忆） */
+    var timer = null;
+    var clear = function(){ if (timer) { clearTimeout(timer); timer = null; } };
+    item.addEventListener("touchstart", function(){
+      clear();
+      timer = setTimeout(function(){ timer = null; askRemove(k); }, 650);
+    }, { passive: true });
+    item.addEventListener("touchend", clear);
+    item.addEventListener("touchmove", clear);
+    item.addEventListener("contextmenu", function(ev){ ev.preventDefault(); askRemove(k); });
+
+    box.appendChild(item);
+  });
+}
+function askRemove(k) {
+  var p = P(k);
+  if (!confirm("把「" + p.botName + "」从消息列表移除？\n\n聊天记录和记忆都会保留，以后在「＋」里可以随时加回来。")) return;
+  state.active = state.active.filter(function(x){ return x !== k; });
+  LS.set("active", state.active);
+  renderSessions();
+}
+/* 进入某个角色的对话框 */
+function openChat(k) {
   if (!ROLES[k]) return;
+  ensureActive(k);
   state.cur = k;
+  state.editRole = k;
   LS.set("cur", k);
   nativeLoadRole(k);
   P(k);
+  state.unread[k] = 0;
+  LS.set("unread", state.unread);
+
   applyIdentity();
   renderMsgs();
   fillSettings();
-  if (!CH().length) setTimeout(openGreeting, 350);
+
+  document.getElementById("page-home").classList.remove("show");
+  document.getElementById("page-chat").classList.add("show");
+  document.getElementById("app").classList.add("in-chat");
+  document.getElementById("ipt").value = "";
   document.getElementById("roleSheet").classList.remove("show");
+  chatOpen = true;
+
+  /* 让系统返回键 / 浏览器返回能退到消息列表，而不是直接退出 App */
+  try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(true); } catch(e) {}
+  try {
+    if (history.state && history.state.nuanyuChat) history.replaceState({ nuanyuChat: k }, "", "#chat-" + k);
+    else history.pushState({ nuanyuChat: k }, "", "#chat-" + k);
+  } catch(e) {}
+
+  var box = document.getElementById("msgs");
+  box.scrollTop = box.scrollHeight;
+  if (!CH().length) {
+    setTimeout(function(){
+      /* 期间如果已经退出这个对话框，就不再冒开场白了 */
+      if (chatOpen && state.cur === k && !CH().length) openGreeting();
+    }, 400);
+  }
 }
+/* 返回消息列表 */
+function backHome() {
+  var popping = false;
+  try {
+    if (history.state && history.state.nuanyuChat) { popGuard = true; history.back(); popping = true; }
+  } catch(e) { popGuard = false; }
+  doBackHomeUI();
+  if (!popping) { /* 没有历史记录时也保证 UI 已经退回去 */ }
+}
+function doBackHomeUI() {
+  chatOpen = false;
+  try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
+  document.getElementById("page-chat").classList.remove("show");
+  document.getElementById("app").classList.remove("in-chat");
+  Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
+  document.getElementById("page-home").classList.add("show");
+  Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){
+    x.classList.toggle("on", x.dataset.tab === "page-home");
+  });
+  renderSessions();
+}
+/* 系统返回键（浏览器 / 安卓 WebView）回到消息列表 */
+var popGuard = false;
+window.addEventListener("popstate", function(){
+  if (popGuard) { popGuard = false; return; }
+  if (document.getElementById("page-chat").classList.contains("show")) doBackHomeUI();
+});
+/* 原生返回键会调用这个（MainActivity.onBackPressed） */
+window.__nativeBack = function(){ doBackHomeUI(); };
+/* 旧名字保留，避免其它地方调用失效 */
+function switchRole(k) { openChat(k); }
+
 function openRoleSheet() {
   var g = document.getElementById("rsGrid");
   g.innerHTML = "";
   Object.keys(ROLES).forEach(function(k){
     var r = ROLES[k];
-    var name = state.profiles[k] && state.profiles[k].botName ? state.profiles[k].botName : r.defName;
+    var p = P(k);
+    var added = state.active.indexOf(k) !== -1;
     var b = document.createElement("button");
     b.className = "rs-item" + (k === state.cur ? " cur" : "");
-    b.innerHTML = '<span class="ri-emoji">' + r.emoji + '</span><span><span class="ri-name">' + name + '</span><span class="ri-tag" style="display:block">' + r.label + ' · ' + r.tag + '</span></span>';
-    b.onclick = function(){ switchRole(k); };
+    var em = document.createElement("span");
+    em.className = "ri-emoji"; em.textContent = r.emoji;
+    var wrap = document.createElement("span");
+    var nm = document.createElement("span");
+    nm.className = "ri-name"; nm.textContent = p.botName;
+    var tg = document.createElement("span");
+    tg.className = "ri-tag"; tg.style.display = "block";
+    tg.textContent = r.label + (added ? " · 已有对话框" : " · 点击开始");
+    wrap.appendChild(nm); wrap.appendChild(tg);
+    b.appendChild(em); b.appendChild(wrap);
+    b.onclick = function(){ openChat(k); };
     g.appendChild(b);
   });
   document.getElementById("roleSheet").classList.add("show");
 }
+document.getElementById("btnAddRole").onclick = openRoleSheet;
 document.getElementById("headAvatar").onclick = openRoleSheet;
+document.getElementById("chatBack").onclick = backHome;
 document.getElementById("rsClose").onclick = function(){ document.getElementById("roleSheet").classList.remove("show"); };
 document.getElementById("roleSheet").onclick = function(e){ if (e.target === this) this.classList.remove("show"); };
 
 /* ---------- 标签页 ---------- */
 Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(b){
   b.onclick = function(){
+    chatOpen = false;
+    try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
+    document.getElementById("page-chat").classList.remove("show");
+    document.getElementById("app").classList.remove("in-chat");
     Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){ x.classList.remove("on"); });
     b.classList.add("on");
     Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
     document.getElementById(b.dataset.tab).classList.add("show");
+    if (b.dataset.tab === "page-home") renderSessions();
     if (b.dataset.tab === "page-mood") renderMood();
     if (b.dataset.tab === "page-remind") renderReminders();
     if (b.dataset.tab === "page-set") fillSettings();
