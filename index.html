@@ -476,6 +476,12 @@
       <div class="switch-row"><span>到点推送晚安通知</span><button class="switch" id="nightSwitch"></button></div>
       <div class="set-row"><label>推送时间</label><input id="nightTime" type="time" value="22:30"></div>
       <button class="btn-plain" id="nightSave">保存晚安设置</button>
+      <div class="set-row" style="margin-top:8px"><button class="btn-plain" id="btnTestNotify">🔔 发一条测试通知（验证推送是否真的能用）</button></div>
+      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:8px">
+        如果测试通知收不到，依次检查：① 系统设置 → 应用 → 暖语 → 通知 → 允许通知；
+        ② 鸿蒙/华为：应用启动管理 → 暖语 → 关掉「自动管理」，手动允许「自启动 / 关联启动 / 后台活动」（这步不做，锁屏后闹钟会被系统拦掉）；
+        ③ 电池设置里取消对暖语的省电限制。
+      </div>
     </div>
 
     <div class="set-card">
@@ -1893,9 +1899,31 @@ document.getElementById("nightSave").onclick = function() {
   if (window.AndroidBridge && window.AndroidBridge.scheduleGoodnight) {
     var p = state.night.time.split(":");
     window.AndroidBridge.scheduleGoodnight(parseInt(p[0],10) || 22, parseInt(p[1],10) || 30, state.night.on);
-    alert("晚安闹钟已设置 ✅ 每天 " + state.night.time);
+    alert("晚安闹钟已设置 ✅ 每天 " + state.night.time +
+      (state.night.on ? "\n\n强烈建议点下面的「发送测试通知」验证一遍；收不到就按提示检查通知权限和应用启动管理。" : "") +
+      "\n若今天设定的时间已过，明天开始响。");
   } else {
     alert("已保存。浏览器版不支持系统推送，App 版生效");
+  }
+};
+/* 测试通知：验证推送通道 + 指导排查 */
+document.getElementById("btnTestNotify").onclick = function() {
+  if (!(window.AndroidBridge && window.AndroidBridge.testNotify)) {
+    alert("浏览器版没有系统通知能力，请在手机 App 里点这个按钮测试。");
+    return;
+  }
+  var perm = true;
+  try { perm = window.AndroidBridge.notificationsEnabled(); } catch(e) {}
+  if (!perm) {
+    alert("通知权限被关了 🚫\n去 系统设置 → 应用 → 暖语 → 通知 → 允许通知，然后再测一次。");
+    return;
+  }
+  var ok = false;
+  try { ok = window.AndroidBridge.testNotify(); } catch(e) { ok = false; }
+  if (ok) {
+    alert("测试通知已发出 🔔\n\n几秒内下拉通知栏看「暖语 · 测试通知」。收到了说明通道正常，晚上到点会准时响。\n\n没收到的话按上面卡片里的三步检查（通知权限 / 应用启动管理 / 电池限制），其中鸿蒙的「应用启动管理」最关键。");
+  } else {
+    alert("发送失败，请重启 App 再试一次。");
   }
 };
 
