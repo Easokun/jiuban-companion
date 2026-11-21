@@ -123,7 +123,29 @@
     font-size:20px; background:linear-gradient(135deg,#ffd6e2,#ffe9f0); flex-shrink:0; border:none;
   }
   .chat-head .c-name { font-weight:600; font-size:16px; }
-  .chat-head .c-status { font-size:11px; color:#b59aa5; margin-top:2px; }
+  .chat-head .c-status { font-size:11px; color:#b59aa5; margin-top:2px; cursor:pointer; }
+  .chat-head .c-status::after { content:" ›"; opacity:.55; }
+  .c-status.ai { color:#3f7d55; }
+  .c-status.warn { color:#a8762a; }
+  .mode-chip {
+    display:inline-flex; align-items:center; gap:6px; margin-top:7px;
+    font-size:11px; padding:4px 10px; border-radius:20px; border:1px solid #f0d9e0;
+    background:#fff; color:#8d6b7a; font-family:inherit;
+  }
+  .mode-chip .dot { width:6px; height:6px; border-radius:50%; background:#c9aab6; flex-shrink:0; }
+  .mode-chip.on { border-color:#cbead6; background:#f2fbf5; color:#3f7d55; }
+  .mode-chip.on .dot { background:#4cb96b; }
+  .mode-chip.warn { border-color:#ffd9a8; background:#fff8ec; color:#a8762a; }
+  .mode-chip.warn .dot { background:#e8a33d; }
+  .test-out {
+    display:none; margin-top:10px; padding:11px 13px; border-radius:12px;
+    font-size:12px; line-height:1.75; white-space:pre-wrap; word-break:break-word;
+  }
+  .test-out.show { display:block; }
+  .test-out.ok { background:#f2fbf5; border:1px solid #cbead6; color:#2f6b45; }
+  .test-out.bad { background:#fff5f7; border:1px solid #ffd0dc; color:#a63a56; }
+  .test-out.busy { background:#f7f4ff; border:1px solid #e0d8f5; color:#5c4d8a; }
+  .msg .m-src { font-size:10px; opacity:.6; margin-left:4px; }
   #msgs { flex:1; overflow-y:auto; padding:16px 14px 10px; display:flex; flex-direction:column; gap:2px; min-height:0; }
   .msg { max-width:78%; padding:10px 13px; border-radius:16px; line-height:1.6; margin-bottom:8px; word-break:break-word; white-space:pre-wrap; font-size:15px; }
   .msg.user { align-self:flex-end; background:linear-gradient(135deg,#ff8fab,#ff6b8f); color:#fff; border-bottom-right-radius:5px; }
@@ -257,6 +279,7 @@
       <div>
         <div class="hh-title">消息</div>
         <div class="hh-sub" id="hhSub">每个角色一个独立对话框</div>
+        <button class="mode-chip" id="modeChip"><span class="dot"></span><span id="modeChipText">检测中…</span></button>
       </div>
       <button class="hh-add" id="btnAddRole">＋</button>
     </div>
@@ -339,6 +362,9 @@
         <button class="switch" id="voiceSwitch"></button>
       </div>
       <button class="btn-plain" id="apiSave">保存模型设置</button>
+      <button class="btn-plain" id="apiTest" style="margin-top:8px">🔍 测试连接（验证模型是否真的通）</button>
+      <div class="test-out" id="apiTestOut"></div>
+      <div class="set-row" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px" id="apiModeLine"></div>
       <button class="btn-plain btn-danger" id="apiKeyClear" style="margin-top:8px">清除已保存的 Key</button>
     </div>
 
@@ -379,7 +405,7 @@
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.6 · 多角色情感陪伴智能体<br>消息列表 · 每个角色独立对话框 · 长期记忆 · 加密备份</div>
+    <div class="ver-tip">暖语 v1.7 · 多角色情感陪伴智能体<br>连接自检 · 消息列表 · 独立记忆 · 加密备份</div>
   </div>
 
   <div class="tabbar">
@@ -722,6 +748,155 @@ var chatOpen = false;
  * 浏览器：只保留在当前会话内存（sessionStorage），关掉页面就失效
  */
 var HAS_VAULT = !!(window.AndroidBridge && window.AndroidBridge.setApiKey);
+
+/* ---------- 连接模式判定 & 连通性自检 ---------- */
+var apiStatus = LS.get("apiStatus", null); /* { ok, at, ms, msg, model } */
+
+function modeInfo() {
+  if (!state.api || !state.api.on) return { k:"off", chip:"离线模式 · 本地话术", head:"离线对话", cls:"" };
+  if (!state.api.key) return { k:"nokey", chip:"AI 已开但缺 Key · 实际仍离线", head:"离线（缺 Key）", cls:"warn" };
+  if (apiStatus && apiStatus.ok === false) return { k:"ai", chip:"AI 模式 · 上次连接失败", head:"AI（连接异常）", cls:"warn" };
+  if (apiStatus && apiStatus.ok === true) return { k:"ai", chip:"AI 已连通 · " + modelName(), head:"AI 已连通", cls:"ai" };
+  return { k:"ai", chip:"AI 模式 · 待验证 · " + modelName(), head:"AI 待验证", cls:"ai" };
+}
+function refreshModeUI() {
+  var m = modeInfo();
+  var chip = document.getElementById("modeChip");
+  if (chip) chip.className = "mode-chip" + (m.cls ? " " + m.cls : "");
+  var txt = document.getElementById("modeChipText");
+  if (txt) txt.textContent = m.chip;
+  var st = document.getElementById("headStatus");
+  if (st) {
+    var r = ROLES[state.cur] || ROLES.guimi;
+    st.textContent = r.label + " · " + m.head;
+    st.className = "c-status" + (m.cls ? " " + m.cls : "");
+  }
+  var line = document.getElementById("apiModeLine");
+  if (line) {
+    line.textContent = apiStatus
+      ? "上次检测：" + new Date(apiStatus.at).toLocaleString("zh-CN") + " · " + (apiStatus.ok ? "成功" : "失败") + " · " + (apiStatus.msg || "")
+      : "还没检测过。填好 Key 和模型名后，点上面的「测试连接」验证一次。";
+  }
+}
+function markStatus(ok, msg, ms) {
+  apiStatus = { ok: !!ok, at: Date.now(), ms: ms || 0, msg: msg || "", model: state.api.model || API_DEFAULT_MODEL };
+  LS.set("apiStatus", apiStatus);
+  refreshModeUI();
+}
+function clearStatus() {
+  apiStatus = null;
+  LS.del("apiStatus");
+  refreshModeUI();
+}
+
+function withTimeout(p, ms) {
+  return new Promise(function(resolve, reject){
+    var done = false;
+    var t = setTimeout(function(){ if (!done) { done = true; reject(new Error("__timeout")); } }, ms);
+    p.then(function(v){ if (!done) { done = true; clearTimeout(t); resolve(v); } },
+           function(e){ if (!done) { done = true; clearTimeout(t); reject(e); } });
+  });
+}
+function setTestOut(text, cls) {
+  var o = document.getElementById("apiTestOut");
+  if (!o) return;
+  o.className = "test-out show " + (cls || "");
+  o.textContent = text;
+}
+function cfgFromForm() {
+  function v(id){ var el = document.getElementById(id); return el ? el.value.trim() : ""; }
+  var sw = document.getElementById("apiSwitch");
+  return {
+    url: (v("apiUrl") || state.api.url || API_DEFAULT_URL).replace(/\/+$/, ""),
+    model: v("apiModel") || state.api.model || API_DEFAULT_MODEL,
+    key: v("apiKey") || state.api.key || "",
+    on: sw ? sw.classList.contains("on") : !!state.api.on
+  };
+}
+function explainHttp(status, body) {
+  var m = null;
+  try { var j = JSON.parse(body); m = (j.error && (j.error.message || j.error.code)) || j.message || null; } catch(e) {}
+  var base = "HTTP " + status;
+  if (status === 401) return "Key 无效或已过期（" + base + "）。检查复制时是否带了空格，或 Key 已被删除/重置。";
+  if (status === 403) return "没有权限（" + base + "）。用自建代理时，多半是访问令牌（NUANYU_TOKEN）填错了。";
+  if (status === 404) return "地址或模型不存在（" + base + "）。常见两种：接口地址少了 /v1，或模型名写错（去百炼控制台复制准确 ID）。";
+  if (status === 429) return "被限流或额度不足（" + base + "）。稍等再试，或查账户余额 / 代理每分钟限制。";
+  if (status === 400) return "请求被拒绝（" + base + "）" + (m ? "：" + m : "。多半是模型名不对。");
+  if (status >= 500) return "服务端出错了（" + base + "）" + (m ? "：" + m : "。用自建代理的话看服务器日志。");
+  return "请求失败（" + base + "）" + (m ? "：" + m : "");
+}
+function testConnection() {
+  var cfg = cfgFromForm();
+  var btn = document.getElementById("apiTest");
+  if (btn) { btn.disabled = true; btn.textContent = "测试中…"; }
+  setTestOut("正在检测…\n· 设备网络：" + (navigator.onLine === false ? "无网络" : "已联网") +
+    "\n· 接口地址：" + cfg.url + "\n· 模型：" + cfg.model, "busy");
+  var t0 = Date.now();
+  function finish(ok, text) {
+    setTestOut(text, ok ? "ok" : "bad");
+    markStatus(ok, ok ? "连接成功 · " + cfg.model : (text.split("\n")[0] || "连接失败").replace(/^✗\s*/, ""), Date.now() - t0);
+    if (btn) { btn.disabled = false; btn.textContent = "🔍 测试连接（验证模型是否真的通）"; }
+  }
+
+  if (navigator.onLine === false) { finish(false, "✗ 设备当前没有网络\n关掉飞行模式、连上 WiFi 或流量再试。"); return; }
+  if (!cfg.on) { finish(false, "✗ 现在是离线模式（大模型开关没打开）\n把上面的开关打开，App 才会联网。离线模式永远不会请求模型。"); return; }
+  if (!cfg.key) { finish(false, "✗ 没有 API Key\n在「API Key」里填百炼 Key（自建代理就填访问令牌），保存后再测。"); return; }
+
+  /* 自建代理（地址以 /api 结尾）先探一下服务端健康状态，好区分"网络不通"和"服务端没配 Key" */
+  var health = /\/api$/.test(cfg.url) ? cfg.url + "/health" : null;
+  var step1 = health ? withTimeout(fetch(health, { method: "GET" }), 8000).then(function(r){
+    return r.text().then(function(t){
+      if (!r.ok) throw new Error("HEALTH_" + r.status + ":" + t.slice(0, 160));
+      var j = null; try { j = JSON.parse(t); } catch(e) {}
+      if (j && j.key_configured === false) throw new Error("SERVER_NOKEY");
+      if (j && j.token_configured === false) throw new Error("SERVER_NOTOKEN");
+      return true;
+    });
+  }) : Promise.resolve(true);
+
+  step1.then(function(){
+    return withTimeout(fetch(cfg.url + "/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + cfg.key },
+      body: JSON.stringify({
+        model: cfg.model, stream: false, max_tokens: 16,
+        messages: [{ role: "user", content: "这是一次连接测试，请只回两个字：在的" }]
+      })
+    }), 25000);
+  }).then(function(r){
+    return r.text().then(function(t){
+      var ms = Date.now() - t0;
+      if (!r.ok) { finish(false, "✗ " + explainHttp(r.status, t) + "\n· 耗时 " + ms + "ms\n· 接口 " + cfg.url + "\n· 模型 " + cfg.model); return; }
+      var j = null; try { j = JSON.parse(t); } catch(e) {}
+      var msg = j && j.choices && j.choices[0] && j.choices[0].message;
+      var content = (msg && (msg.content || "")) || "";
+      if (!content) { finish(false, "✗ 接口通了，但没拿到回复内容\n返回：" + t.slice(0, 180)); return; }
+      finish(true, "✓ 连接成功，模型可用\n· 耗时 " + ms + "ms" +
+        "\n· 模型：" + (j.model || cfg.model) +
+        "\n· TA 的回应：" + content.trim().slice(0, 60) +
+        "\n· " + (health ? "服务器代理正常（Key 配在服务端）" : "直连百炼正常"));
+    });
+  }).catch(function(e){
+    var ms = Date.now() - t0;
+    var m = (e && e.message) || String(e);
+    var tip;
+    if (m === "__timeout") {
+      tip = "✗ 请求超时（" + Math.round(ms / 1000) + " 秒无响应）\n网络太慢、地址不可达，或被系统拦住了。";
+    } else if (m === "SERVER_NOKEY") {
+      tip = "✗ 服务器代理是通的，但服务端没配百炼 Key\n去服务器检查 DASHSCOPE_API_KEY 环境变量。";
+    } else if (m === "SERVER_NOTOKEN") {
+      tip = "✗ 服务器没配访问令牌 NUANYU_TOKEN，出于安全会拒绝提供代理\n按部署文档重新跑一次 deploy.sh。";
+    } else if (m.indexOf("HEALTH_") === 0) {
+      tip = "✗ 连不上你的服务器（" + m.split(":")[0].replace("HEALTH_", "") + "）\n检查：服务是否启动、安全组是否放行端口、地址里的 IP 对不对。";
+    } else if (/Failed to fetch|NetworkError|Load failed/i.test(m)) {
+      tip = "✗ 请求根本没发出去（网络层失败）\n常见原因：\n· 手机没网，或 WiFi 需要网页认证\n· 接口地址写错 / 域名解析不了\n· 用了 http:// 被系统拦了明文请求\n· 网页是 https 而接口是 http（混合内容被拦）\n· 证书过期或自签证书不被信任";
+    } else {
+      tip = "✗ 出错：" + m;
+    }
+    finish(false, tip + "\n· 耗时 " + ms + "ms\n· 接口 " + cfg.url);
+  });
+}
+
 function persistApi() {
   LS.set("api", { on: !!state.api.on, url: state.api.url, model: state.api.model });
 }
@@ -765,7 +940,9 @@ function nativeReplaceRole(role) {
 function persistMsg(role, msg) {
   if (NATIVE_CHAT) {
     try {
-      if (window.AndroidBridge.appendChat(role, msg.role, msg.text, String(msg.ts))) return;
+      var b = window.AndroidBridge;
+      if (msg.src && b.appendChat2 && b.appendChat2(role, msg.role, msg.text, String(msg.ts), msg.src)) return;
+      if (b.appendChat(role, msg.role, msg.text, String(msg.ts))) return;
     } catch(e) {}
   }
   saveChats();
@@ -899,7 +1076,7 @@ function applyIdentity() {
   var p = P();
   document.getElementById("headAvatar").textContent = r.emoji;
   document.getElementById("headName").textContent = p.botName;
-  document.getElementById("headStatus").textContent = r.label + " · 在线";
+  refreshModeUI();
   document.title = p.botName + " · 暖语";
 }
 function openGreeting() {
@@ -908,10 +1085,10 @@ function openGreeting() {
   var today = lines.some(function(l){ return l.indexOf("今天是")===0; });
   if (h>=21 && state.lastNight !== todayStr()) {
     state.lastNight = todayStr(); LS.set("lastNight", state.lastNight);
-    pushBot(pick(NIGHT_GOOD));
+    pushBot(pick(NIGHT_GOOD), null, "off");
     return;
   }
-  pushBot(greeting());
+  pushBot(greeting(), null, "off");
   if (today) setTimeout(function(){ pushBot("对了，今天这个纪念日我怎么可能忘呢！要好好过这一天呀 🎉"); }, 900);
   else if (lines.length && Math.random()<0.6) setTimeout(function(){ pushBot("悄悄提醒你：" + pick(lines) + "，别忘啦 📌"); }, 900);
   else if (MEM().length && Math.random()<0.5) setTimeout(function(){ var m = memoryFlavor("", true); if (m) pushBot(m); }, 900);
@@ -928,7 +1105,7 @@ function greeting() {
 }
 
 /* ---------- 消息渲染 ---------- */
-function addMsgEl(role, text, ts) {
+function addMsgEl(role, text, ts, src) {
   var box = document.getElementById("msgs");
   var d = document.createElement("div");
   d.className = "msg " + role;
@@ -937,6 +1114,12 @@ function addMsgEl(role, text, ts) {
   var tm = document.createElement("span");
   tm.className = "m-time"; tm.textContent = timeStr(ts);
   d.appendChild(t); d.appendChild(tm);
+  if (src) {
+    var sp = document.createElement("span");
+    sp.className = "m-src";
+    sp.textContent = src === "ai" ? "· AI生成" : "· 本地生成";
+    d.appendChild(sp);
+  }
   box.appendChild(d); box.scrollTop = box.scrollHeight;
   return d;
 }
@@ -953,7 +1136,7 @@ function renderMsgs() {
     hint.textContent = "只显示最近 " + RENDER_MAX + " 条（共 " + arr.length + " 条，更早的仍在本地保存）";
     box.appendChild(hint);
   }
-  for (var i = start; i < arr.length; i++) addMsgEl(arr[i].role, arr[i].text, arr[i].ts);
+  for (var i = start; i < arr.length; i++) addMsgEl(arr[i].role, arr[i].text, arr[i].ts, arr[i].src);
 }
 function pushUser(text, role) {
   role = role || state.cur;
@@ -963,15 +1146,16 @@ function pushUser(text, role) {
   touchSession(role, msg);
   if (chatOpen && role === state.cur) addMsgEl("user", text, ts);
 }
-function pushBot(text, role) {
+function pushBot(text, role, src) {
   role = role || state.cur;
   var ts = Date.now();
   var msg = {role:"bot", text:text, ts:ts};
+  if (src) msg.src = src;
   CH(role).push(msg); persistMsg(role, msg);
   touchSession(role, msg);
   /* 只在「正开着这个角色的聊天窗口」时才画气泡、才播报，避免回复串到别人的对话框 */
   if (chatOpen && role === state.cur) {
-    addMsgEl("bot", text, ts);
+    addMsgEl("bot", text, ts, src);
     speak(text);
   }
   return text;
@@ -1257,13 +1441,15 @@ function send() {
   var facts = extractFacts(text, role);
   showTyping();
 
-  function finish(reply) {
+  function finish(reply, src) {
     hideTyping();
-    if (reply) pushBot(reply, role);
+    if (reply) pushBot(reply, role, src);
     if (facts.length) {
       var ack = facts; facts = [];
       pushBot("（悄悄记进了我的小本本：「" + ack.join("；") + "」，我会记住的～）📝", role);
     }
+    /* 真拿到模型回复，就顺手把状态标成"已连通"，不必再手动测一次 */
+    if (src === "ai" && (!apiStatus || apiStatus.ok === false)) markStatus(true, "最近一条回复由模型生成", 0);
     done();
     maybeSummarize(role);
   }
@@ -1275,7 +1461,7 @@ function send() {
   if (state.api.on && state.api.key) {
     var isToolIntent = /(提醒我|帮我记|记住|别忘|日程|定时|叫我)/.test(text);
     if (isToolIntent) {
-      agentReply(text, role).then(finish).catch(function(){ finish(offlineReply(text, role)); });
+      agentReply(text, role).then(function(r){ finish(r, "ai"); }).catch(function(){ markStatus(false, "接口请求失败，已回退离线话术"); finish(offlineReply(text, role), "off"); });
     } else {
       var bubble = null;
       var msgs = [{ role:"system", content: buildSys(role) }].concat(historyFor(role));
@@ -1293,14 +1479,15 @@ function send() {
         }
       }).then(function(full){
         if (bubble) bubble.remove();
-        finish(full);
+        finish(full, "ai");
       }).catch(function(){
         if (bubble) bubble.remove();
-        finish("（网络有点小状况，我先用老方式陪你聊～\n" + offlineReply(text, role) + "）");
+        markStatus(false, "接口请求失败，已回退离线话术");
+        finish("（网络有点小状况，我先用老方式陪你聊～\n" + offlineReply(text, role) + "）", "off");
       });
     }
   } else {
-    setTimeout(function(){ finish(offlineReply(text, role)); }, 500 + Math.random()*700);
+    setTimeout(function(){ finish(offlineReply(text, role), "off"); }, 500 + Math.random()*700);
   }
 }
 document.getElementById("sendBtn").onclick = send;
@@ -1436,6 +1623,7 @@ function fillSettings() {
   document.getElementById("nightTime").value = state.night.time || "22:30";
   renderAnniv();
   updateStorageInfo();
+  refreshModeUI();
 }
 function updateStorageInfo() {
   var el = document.getElementById("storageInfo");
@@ -1491,15 +1679,19 @@ document.getElementById("apiSave").onclick = function() {
   };
   state.voice = document.getElementById("voiceSwitch").classList.contains("on");
   persistApi(); LS.set("voice", state.voice);
+  /* 配置变了，之前的检测结论就作废，避免显示"已连通"但其实换了地址 */
+  clearStatus();
   fillSettings();
-  alert("已保存 ✅\n模型：" + state.api.model + (state.api.on ? "（已开启）" : "（离线模式）"));
+  var m = modeInfo();
+  alert("已保存 ✅\n模型：" + state.api.model + "\n当前模式：" + m.chip + "\n\n想确认真的能连上，点下面的「测试连接」。");
 };
+document.getElementById("apiTest").onclick = testConnection;
 document.getElementById("apiKeyClear").onclick = function() {
   if (!confirm("清除已保存的 API Key？聊天记录不受影响，但要重新填才能用 AI 模式。")) return;
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   state.api.key = "";
-  persistApi(); fillSettings();
+  persistApi(); clearStatus(); fillSettings();
   alert("已清除 Key");
 };
 document.getElementById("btnTrim").onclick = function() {
@@ -2065,29 +2257,42 @@ function openRoleSheet() {
 document.getElementById("btnAddRole").onclick = openRoleSheet;
 document.getElementById("headAvatar").onclick = openRoleSheet;
 document.getElementById("chatBack").onclick = backHome;
+document.getElementById("modeChip").onclick = goCheckAI;
+document.getElementById("headStatus").onclick = goCheckAI;
 document.getElementById("rsClose").onclick = function(){ document.getElementById("roleSheet").classList.remove("show"); };
 document.getElementById("roleSheet").onclick = function(e){ if (e.target === this) this.classList.remove("show"); };
 
 /* ---------- 标签页 ---------- */
+function gotoTab(tab) {
+  chatOpen = false;
+  try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
+  document.getElementById("page-chat").classList.remove("show");
+  document.getElementById("app").classList.remove("in-chat");
+  Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){
+    x.classList.toggle("on", x.dataset.tab === tab);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
+  document.getElementById(tab).classList.add("show");
+  if (tab === "page-home") renderSessions();
+  if (tab === "page-mood") renderMood();
+  if (tab === "page-remind") renderReminders();
+  if (tab === "page-set") fillSettings();
+}
 Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(b){
-  b.onclick = function(){
-    chatOpen = false;
-    try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
-    document.getElementById("page-chat").classList.remove("show");
-    document.getElementById("app").classList.remove("in-chat");
-    Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){ x.classList.remove("on"); });
-    b.classList.add("on");
-    Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
-    document.getElementById(b.dataset.tab).classList.add("show");
-    if (b.dataset.tab === "page-home") renderSessions();
-    if (b.dataset.tab === "page-mood") renderMood();
-    if (b.dataset.tab === "page-remind") renderReminders();
-    if (b.dataset.tab === "page-set") fillSettings();
-  };
+  b.onclick = function(){ gotoTab(b.dataset.tab); };
 });
+/* 顶部状态点一下 -> 去设置页看详情 / 测试连接 */
+function goCheckAI() {
+  gotoTab("page-set");
+  setTimeout(function(){
+    var card = document.getElementById("apiModeLine");
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior:"smooth", block:"center" });
+  }, 60);
+}
 
 /* ---------- 启动 ---------- */
 renderOnboarding();
+refreshModeUI();
 if (state.cur && ROLES[state.cur]) startApp(false);
 /* 每次启动把提醒与晚安闹钟跟本地数据对齐一次，重装/清数据后也能自动恢复 */
 setTimeout(syncNative, 900);
