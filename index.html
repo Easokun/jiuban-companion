@@ -352,9 +352,13 @@
         <button class="switch" id="apiSwitch"></button>
       </div>
       <div class="set-row"><label>接口地址（OpenAI 兼容）</label><input id="apiUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
-      <div class="set-row"><label>API Key（系统密钥库加密保存）</label><input id="apiKey" type="password" placeholder="sk-..."></div>
+      <div class="set-row"><label>API Key（App 内加密保存）</label><input id="apiKey" type="password" placeholder="sk-... 或访问令牌"></div>
+      <div class="switch-row" id="rememberRow" style="display:none">
+        <span>网页记住访问令牌（免得每次重填）<span style="display:block;font-size:10px;color:#b59aa5">只对自建代理地址（以 /api 结尾）生效；百炼原始 Key 不会记住</span></span>
+        <button class="switch" id="apiRemember"></button>
+      </div>
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin:-4px 0 8px">
-        App 内 Key 由系统密钥库加密保存，明文不写进本地存储；浏览器版仅当前会话内存保留，关掉就没了。留空表示沿用已保存的 Key。
+        App 内 Key 由系统密钥库加密保存，明文不写进本地存储。浏览器版默认只在本次会话内保留，关掉就没；若填的是自建代理的访问令牌，可打开下面的开关长期记住。留空表示沿用已保存的。
       </div>
       <div class="set-row"><label>模型名</label><input id="apiModel" placeholder="qwen3.7-max"></div>
       <div class="switch-row" style="margin-top:12px">
@@ -405,7 +409,7 @@
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.7 · 多角色情感陪伴智能体<br>连接自检 · 消息列表 · 独立记忆 · 加密备份</div>
+    <div class="ver-tip">暖语 v1.8 · 多角色情感陪伴智能体<br>连接自检 · 令牌记忆 · 独立记忆 · 加密备份</div>
   </div>
 
   <div class="tabbar">
@@ -900,6 +904,7 @@ function testConnection() {
 function persistApi() {
   LS.set("api", { on: !!state.api.on, url: state.api.url, model: state.api.model });
 }
+var rememberedToken = false; /* 浏览器版是否记住了自建代理的访问令牌（可选，不记百炼原始 Key） */
 (function initApiKey() {
   var legacy = (state.api && state.api.key) ? String(state.api.key) : "";
   var k = "";
@@ -908,6 +913,7 @@ function persistApi() {
     if (!k && legacy) { try { window.AndroidBridge.setApiKey(legacy); k = legacy; } catch(e) {} }
   } else {
     try { k = sessionStorage.getItem("nuanyu_key") || ""; } catch(e) { k = ""; }
+    if (!k) { k = LS.get("token_saved", ""); if (k) rememberedToken = true; }
     if (!k && legacy) { k = legacy; try { sessionStorage.setItem("nuanyu_key", k); } catch(e) {} }
   }
   state.api.key = k;
@@ -1614,8 +1620,12 @@ function fillSettings() {
   var ki = document.getElementById("apiKey");
   ki.value = "";
   ki.placeholder = state.api.key
-    ? (HAS_VAULT ? "已加密保存在系统密钥库（改 Key 直接输入新的）" : "已保存在本次会话（浏览器版不长期保存）")
-    : "sk-...";
+    ? (HAS_VAULT ? "已加密保存在系统密钥库（改 Key 直接输入新的）"
+                 : (rememberedToken ? "已记住访问令牌，下次打开免填" : "已保存在本次会话（浏览器版不长期保存）"))
+    : "sk-... 或访问令牌";
+  var remRow = document.getElementById("rememberRow");
+  if (remRow) remRow.style.display = HAS_VAULT ? "none" : "flex";
+  document.getElementById("apiRemember").classList.toggle("on", rememberedToken);
   document.getElementById("apiModel").value = state.api.model || API_DEFAULT_MODEL;
   document.getElementById("voiceSwitch").classList.toggle("on", !!state.voice);
   document.getElementById("memBox").value = MEM(ek).join("\n");
@@ -1679,17 +1689,33 @@ document.getElementById("apiSave").onclick = function() {
   };
   state.voice = document.getElementById("voiceSwitch").classList.contains("on");
   persistApi(); LS.set("voice", state.voice);
+  /* 浏览器版可选记住「自建代理的访问令牌」（百炼原始 Key 永不落盘） */
+  var remSw = document.getElementById("apiRemember");
+  var isProxyToken = /\/api$/.test(state.api.url) && key;
+  if (remSw && remSw.classList.contains("on") && !HAS_VAULT && isProxyToken) {
+    LS.set("token_saved", key);
+    rememberedToken = true;
+  } else {
+    LS.del("token_saved");
+    rememberedToken = false;
+  }
   /* 配置变了，之前的检测结论就作废，避免显示"已连通"但其实换了地址 */
   clearStatus();
   fillSettings();
   var m = modeInfo();
-  alert("已保存 ✅\n模型：" + state.api.model + "\n当前模式：" + m.chip + "\n\n想确认真的能连上，点下面的「测试连接」。");
+  alert("已保存 ✅\n模型：" + state.api.model + "\n当前模式：" + m.chip +
+    (!HAS_VAULT && remSw && remSw.classList.contains("on")
+      ? (rememberedToken ? "\n网页版已记住访问令牌，下次打开免填" : "\n（没记住：只有以 /api 结尾的自建代理地址 + 已填令牌才会记住）")
+      : "") +
+    "\n\n想确认真的能连上，点下面的「测试连接」。");
 };
+document.getElementById("apiRemember").onclick = function(){ this.classList.toggle("on"); };
 document.getElementById("apiTest").onclick = testConnection;
 document.getElementById("apiKeyClear").onclick = function() {
   if (!confirm("清除已保存的 API Key？聊天记录不受影响，但要重新填才能用 AI 模式。")) return;
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
+  LS.del("token_saved"); rememberedToken = false;
   state.api.key = "";
   persistApi(); clearStatus(); fillSettings();
   alert("已清除 Key");
@@ -2036,7 +2062,7 @@ document.getElementById("btnClearChat").onclick = function() {
 };
 document.getElementById("btnReset").onclick = function() {
   if (!confirm("重置全部数据？聊天、记忆、心情、提醒、身份都会被删除。")) return;
-  ["cur","profiles","chats","memories","summaries","summaryDone","moods","anniv","api","night","lastNight","reminders","voice","active","lastMsg","unread"].forEach(function(k){ LS.del(k); });
+  ["cur","profiles","chats","memories","summaries","summaryDone","moods","anniv","api","night","lastNight","reminders","voice","active","lastMsg","unread","token_saved","apiStatus"].forEach(function(k){ LS.del(k); });
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   if (NATIVE_CHAT) { try { window.AndroidBridge.clearAllChats(); } catch(e) {} }
