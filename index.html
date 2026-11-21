@@ -316,7 +316,7 @@
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.4 · 多角色情感陪伴智能体<br>qwen3.7-max · 长期记忆 · 工具调用 · 语音播报 · 加密备份 · 离线可用</div>
+    <div class="ver-tip">暖语 v1.5 · 多角色情感陪伴智能体<br>本机数据库存聊天 · 长期记忆 · 工具调用 · 加密备份 · 离线可用</div>
   </div>
 
   <div class="tabbar">
@@ -609,6 +609,7 @@ var state = {
   chats: LS.get("chats", {}),
   mems: LS.get("memories", {}),
   summaries: LS.get("summaries", {}),
+  summaryDone: LS.get("summaryDone", {}),
   moods: LS.get("moods", []),
   anniv: LS.get("anniv", []),
   api: LS.get("api", { on:false, url:"", key:"", model:"" }),
@@ -642,7 +643,61 @@ function persistApi() {
   /* 把旧版本存在 localStorage 里的明文 Key 清掉 */
   if (legacy) persistApi();
 })();
-capAllChats(400);
+/* ---------- 聊天记录存储 ----------
+ * App 内：写入原生 SQLite，容量跟着手机存储走，不再受 localStorage 5MB 配额限制
+ * 浏览器：退回 localStorage（约 5MB，所有角色共用这一个额度）
+ */
+var NATIVE_CHAT = !!(window.AndroidBridge && window.AndroidBridge.getChat);
+var nativeLoaded = {};
+
+function nativeLoadRole(role) {
+  if (!NATIVE_CHAT || nativeLoaded[role]) return;
+  nativeLoaded[role] = true;
+  try {
+    var arr = JSON.parse(window.AndroidBridge.getChat(role) || "[]");
+    if (arr && arr.length) state.chats[role] = arr;
+  } catch(e) {}
+}
+function nativeReplaceRole(role) {
+  if (!NATIVE_CHAT) return false;
+  try {
+    var ok = window.AndroidBridge.replaceChat(role, JSON.stringify(state.chats[role] || []));
+    nativeLoaded[role] = true;
+    return !!ok;
+  } catch(e) { return false; }
+}
+function persistMsg(role, msg) {
+  if (NATIVE_CHAT) {
+    try {
+      if (window.AndroidBridge.appendChat(role, msg.role, msg.text, String(msg.ts))) return;
+    } catch(e) {}
+  }
+  saveChats();
+}
+(function initChats() {
+  if (!NATIVE_CHAT) { capAllChats(400); return; }
+  if (state.cur) nativeLoadRole(state.cur);
+  /* 从 v1.4 及更早版本升级：把 localStorage 里的聊天搬进数据库 */
+  var legacy = LS.get("chats", null);
+  if (!legacy) return;
+  var moved = false;
+  Object.keys(legacy).forEach(function(k){
+    if (!legacy[k] || !legacy[k].length) return;
+    /* 以数据库为准：库里已有这个角色的消息就不覆盖 */
+    var exists = [];
+    try { exists = JSON.parse(window.AndroidBridge.getChat(k) || "[]") || []; } catch(e) {}
+    if (exists.length) return;
+    try {
+      if (window.AndroidBridge.replaceChat(k, JSON.stringify(legacy[k]))) moved = true;
+    } catch(e) {}
+  });
+  if (moved) {
+    state.chats = {};
+    nativeLoaded = {};
+    if (state.cur) nativeLoadRole(state.cur);
+    LS.del("chats");
+  }
+})();
 
 function P(k) {
   k = k || state.cur;
@@ -656,7 +711,10 @@ function P(k) {
 }
 function CH(k) { k = k || state.cur; if (!state.chats[k]) state.chats[k] = []; return state.chats[k]; }
 function MEM(k) { k = k || state.cur; if (!state.mems[k]) state.mems[k] = []; return state.mems[k]; }
-function saveChats() { LS.set("chats", state.chats); }
+function saveChats() {
+  if (NATIVE_CHAT) { nativeReplaceRole(state.cur); return; }
+  LS.set("chats", state.chats);
+}
 function saveMems() { LS.set("memories", state.mems); }
 function saveProfiles() { LS.set("profiles", state.profiles); }
 
@@ -777,19 +835,31 @@ function addMsgEl(role, text, ts) {
   box.appendChild(d); box.scrollTop = box.scrollHeight;
   return d;
 }
+/* 渲染窗口：只画最近 240 条，避免几千条时卡顿（历史仍完整保存在本地） */
+var RENDER_MAX = 240;
 function renderMsgs() {
   var box = document.getElementById("msgs");
   box.innerHTML = "";
-  CH().forEach(function(m){ addMsgEl(m.role, m.text, m.ts); });
+  var arr = CH();
+  var start = Math.max(0, arr.length - RENDER_MAX);
+  if (start > 0) {
+    var hint = document.createElement("div");
+    hint.className = "empty-tip";
+    hint.textContent = "只显示最近 " + RENDER_MAX + " 条（共 " + arr.length + " 条，更早的仍在本地保存）";
+    box.appendChild(hint);
+  }
+  for (var i = start; i < arr.length; i++) addMsgEl(arr[i].role, arr[i].text, arr[i].ts);
 }
 function pushUser(text) {
   var ts = Date.now();
-  CH().push({role:"user", text:text, ts:ts}); saveChats();
+  var msg = {role:"user", text:text, ts:ts};
+  CH().push(msg); persistMsg(state.cur, msg);
   addMsgEl("user", text, ts);
 }
 function pushBot(text) {
   var ts = Date.now();
-  CH().push({role:"bot", text:text, ts:ts}); saveChats();
+  var msg = {role:"bot", text:text, ts:ts};
+  CH().push(msg); persistMsg(state.cur, msg);
   addMsgEl("bot", text, ts);
   speak(text);
   return text;
@@ -1016,12 +1086,14 @@ function agentReply(text) {
   return step();
 }
 
-/* 摘要压缩 */
+/* 摘要压缩：只生成"更早对话"的摘要喂给模型，原始消息一条都不删 */
 function maybeSummarize() {
   if (!state.api.on || !state.api.key) return;
-  if (CH().length < 40) return;
-  var old = CH().slice(0, 20);
-  var oldText = old.map(function(m){ return (m.role==="user"?"对方：":"我：") + m.text; }).join("\n");
+  var done = state.summaryDone[state.cur] || 0;
+  var arr = CH();
+  if (arr.length - done < 40) return;
+  var slice = arr.slice(done, done + 30);
+  var oldText = slice.map(function(m){ return (m.role==="user"?"对方：":"我：") + m.text; }).join("\n");
   fetch(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
     body: JSON.stringify({ model: modelName(), temperature:0.2,
@@ -1030,10 +1102,12 @@ function maybeSummarize() {
   }).then(function(r){ return r.json(); }).then(function(j){
     var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     if (!c) return;
-    state.summaries[state.cur] = c.trim();
+    var prev = state.summaries[state.cur];
+    state.summaries[state.cur] = (prev ? prev + " " : "") + c.trim();
+    if (state.summaries[state.cur].length > 600) state.summaries[state.cur] = state.summaries[state.cur].slice(-600);
+    state.summaryDone[state.cur] = done + 30;
     LS.set("summaries", state.summaries);
-    state.chats[state.cur] = CH().slice(20);
-    saveChats(); renderMsgs();
+    LS.set("summaryDone", state.summaryDone);
   }).catch(function(){});
 }
 
@@ -1235,10 +1309,16 @@ function fillSettings() {
 function updateStorageInfo() {
   var el = document.getElementById("storageInfo");
   if (!el) return;
-  var total = 0;
-  Object.keys(state.chats).forEach(function(k){ total += (state.chats[k] || []).length; });
-  el.textContent = "本机已用 " + storageUsedKB() + " KB · 共 " + total + " 条消息" +
-    (state.storeFull ? " ⚠️ 存储已接近上限，建议清理旧聊天" : "");
+  if (NATIVE_CHAT) {
+    var n = 0;
+    try { n = window.AndroidBridge.chatCount(); } catch(e) {}
+    el.textContent = "聊天记录 " + n + " 条，存在本机数据库（容量随手机存储，不受 5MB 限制）· 配置类数据 " + storageUsedKB() + " KB";
+  } else {
+    var total = 0;
+    Object.keys(state.chats).forEach(function(k){ total += (state.chats[k] || []).length; });
+    el.textContent = "浏览器版：已用 " + storageUsedKB() + " KB / 约 5 MB（所有角色共用这一个额度）· 共 " + total + " 条消息" +
+      (state.storeFull ? " ⚠️ 已接近上限" : "");
+  }
 }
 document.getElementById("setRole").onchange = function() {
   switchRole(this.value);
@@ -1286,13 +1366,17 @@ document.getElementById("apiKeyClear").onclick = function() {
   alert("已清除 Key");
 };
 document.getElementById("btnTrim").onclick = function() {
-  if (!confirm("把每个角色的聊天裁到最近 150 条？记忆本、心情、纪念日都不受影响。")) return;
-  Object.keys(state.chats).forEach(function(k){
-    if (state.chats[k] && state.chats[k].length > 150) state.chats[k] = state.chats[k].slice(-150);
+  if (!confirm("把每个角色的聊天裁到最近 150 条？记忆本、摘要、心情、纪念日都不受影响。")) return;
+  Object.keys(ROLES).forEach(function(k){
+    nativeLoadRole(k);
+    if (state.chats[k] && state.chats[k].length > 150) {
+      state.chats[k] = state.chats[k].slice(-150);
+      if (NATIVE_CHAT) nativeReplaceRole(k);
+    }
   });
-  LS.set("chats", state.chats);
+  if (!NATIVE_CHAT) LS.set("chats", state.chats);
   renderMsgs(); updateStorageInfo();
-  alert("已清理，当前占用 " + storageUsedKB() + " KB");
+  alert("已清理");
 };
 document.getElementById("memSave").onclick = function() {
   var lines = document.getElementById("memBox").value.split("\n").map(function(s){ return s.trim(); }).filter(function(s){ return s; });
@@ -1345,10 +1429,12 @@ function stampNow() {
   return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
 }
 function exportData() {
+  /* 聊天存在原生库时是按角色懒加载的，导出前先把所有角色取齐 */
+  if (NATIVE_CHAT) Object.keys(ROLES).forEach(nativeLoadRole);
   var data = {
-    v: "1.4", at: Date.now(),
+    v: "1.5", at: Date.now(),
     cur: state.cur, profiles: state.profiles, chats: state.chats, mems: state.mems,
-    summaries: state.summaries, moods: state.moods, anniv: state.anniv,
+    summaries: state.summaries, summaryDone: state.summaryDone, moods: state.moods, anniv: state.anniv,
     /* 只导出接口地址与模型名，不导出 API Key（安全考虑） */
     api: { on: state.api.on, url: state.api.url, model: state.api.model },
     night: state.night, reminders: state.reminders
@@ -1503,6 +1589,7 @@ function applyBackup(d) {
   state.chats = d.chats || {};
   state.mems = d.mems || {};
   state.summaries = d.summaries || {};
+  state.summaryDone = d.summaryDone || {};
   state.moods = d.moods || [];
   state.anniv = d.anniv || [];
   /* 丢弃一天前已过期的提醒，保留未到期的 */
@@ -1511,11 +1598,22 @@ function applyBackup(d) {
   if (d.api) { state.api.url = d.api.url || ""; state.api.model = d.api.model || API_DEFAULT_MODEL; }
   if (d.cur) state.cur = d.cur;
 
-  LS.set("profiles", state.profiles); LS.set("chats", state.chats); LS.set("memories", state.mems);
-  LS.set("summaries", state.summaries); LS.set("moods", state.moods); LS.set("anniv", state.anniv);
+  LS.set("profiles", state.profiles); LS.set("memories", state.mems);
+  LS.set("summaries", state.summaries); LS.set("summaryDone", state.summaryDone);
+  LS.set("moods", state.moods); LS.set("anniv", state.anniv);
   LS.set("reminders", state.reminders); LS.set("cur", state.cur);
   LS.set("night", state.night);
   persistApi();
+
+  /* 聊天记录：原生库按角色分别覆盖，浏览器版整体写 localStorage */
+  if (NATIVE_CHAT) {
+    Object.keys(ROLES).forEach(function(k){
+      if (!state.chats[k]) state.chats[k] = [];
+      nativeReplaceRole(k);
+    });
+  } else {
+    LS.set("chats", state.chats);
+  }
 
   /* 导入后原来的系统闹钟已经不在了，这里重新注册 */
   syncNative();
@@ -1590,6 +1688,7 @@ document.getElementById("btnReset").onclick = function() {
   ["cur","profiles","chats","memories","summaries","moods","anniv","api","night","lastNight","reminders","voice"].forEach(function(k){ LS.del(k); });
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
+  if (NATIVE_CHAT) { try { window.AndroidBridge.clearAllChats(); } catch(e) {} }
   location.reload();
 };
 
@@ -1598,6 +1697,7 @@ function switchRole(k) {
   if (!ROLES[k]) return;
   state.cur = k;
   LS.set("cur", k);
+  nativeLoadRole(k);
   P(k);
   applyIdentity();
   renderMsgs();
