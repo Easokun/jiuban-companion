@@ -166,6 +166,10 @@
   /* 弹窗 */
   #modal { position:fixed; inset:0; z-index:70; background:rgba(60,40,50,.4); display:none; align-items:center; justify-content:center; padding:20px; }
   #modal.show { display:flex; }
+  #pwModal { position:fixed; inset:0; z-index:80; background:rgba(60,40,50,.45); display:none; align-items:center; justify-content:center; padding:20px; }
+  #pwModal.show { display:flex; }
+  .pw-input { width:100%; border:1.5px solid #f0d9e0; border-radius:10px; padding:10px; font-size:13px; outline:none; margin-bottom:10px; color:#4a3b42; background:#fff; }
+  .pw-tip { font-size:11px; color:#b59aa5; line-height:1.7; margin-bottom:10px; }
   .md-body { background:#fff; border-radius:16px; padding:18px; width:100%; max-width:420px; max-height:80vh; overflow-y:auto; }
   .md-body h3 { font-size:15px; margin-bottom:10px; color:#d4547a; }
   .md-body textarea { width:100%; height:180px; border:1.5px solid #f0d9e0; border-radius:10px; padding:10px; font-size:12px; color:#4a3b42; outline:none; resize:none; }
@@ -262,13 +266,17 @@
         <button class="switch" id="apiSwitch"></button>
       </div>
       <div class="set-row"><label>接口地址（OpenAI 兼容）</label><input id="apiUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
-      <div class="set-row"><label>API Key</label><input id="apiKey" type="password" placeholder="sk-..."></div>
+      <div class="set-row"><label>API Key（系统密钥库加密保存）</label><input id="apiKey" type="password" placeholder="sk-..."></div>
+      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin:-4px 0 8px">
+        App 内 Key 由系统密钥库加密保存，明文不写进本地存储；浏览器版仅当前会话内存保留，关掉就没了。留空表示沿用已保存的 Key。
+      </div>
       <div class="set-row"><label>模型名</label><input id="apiModel" placeholder="qwen3.7-max"></div>
       <div class="switch-row" style="margin-top:12px">
         <span>语音播报（TA 的话念出来）</span>
         <button class="switch" id="voiceSwitch"></button>
       </div>
       <button class="btn-plain" id="apiSave">保存模型设置</button>
+      <button class="btn-plain btn-danger" id="apiKeyClear" style="margin-top:8px">清除已保存的 Key</button>
     </div>
 
     <div class="set-card">
@@ -302,10 +310,13 @@
         <button class="btn-plain" id="btnRestore">导入备份</button>
       </div>
       <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnClearChat">清空当前角色聊天</button></div>
+      <div class="set-row" style="margin-top:10px"><button class="btn-plain" id="btnTrim">清理旧聊天（每角色留最近 150 条）</button></div>
       <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnReset">重置全部数据</button></div>
+      <div id="storageInfo" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px"></div>
+      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.3 · 多角色情感陪伴智能体<br>qwen3.7-max · 长期记忆 · 工具调用 · 语音播报 · 离线可用</div>
+    <div class="ver-tip">暖语 v1.4 · 多角色情感陪伴智能体<br>qwen3.7-max · 长期记忆 · 工具调用 · 语音播报 · 加密备份 · 离线可用</div>
   </div>
 
   <div class="tabbar">
@@ -331,12 +342,26 @@
   <div class="md-body">
     <h3 id="mdTitle">数据备份</h3>
     <textarea id="mdText" placeholder="在此粘贴备份内容后点「导入」"></textarea>
-    <input type="file" id="mdFile" accept=".json,application/json" style="display:none">
+    <input type="file" id="mdFile" accept="*/*" style="display:none">
     <div class="md-actions">
       <button class="btn-plain" id="mdCopy">复制</button>
       <button class="btn-plain" id="mdPick">选文件</button>
       <button class="btn-plain" id="mdImport">导入</button>
       <button class="btn-plain" id="mdClose">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 备份密码弹窗 -->
+<div id="pwModal">
+  <div class="md-body">
+    <h3 id="pwTitle">设置备份密码</h3>
+    <div class="pw-tip" id="pwTip"></div>
+    <input type="password" id="pw1" class="pw-input" placeholder="密码（至少 6 位）" autocomplete="new-password">
+    <input type="password" id="pw2" class="pw-input" placeholder="再输一次确认" autocomplete="new-password">
+    <div class="md-actions">
+      <button class="btn-plain" id="pwOk">确定</button>
+      <button class="btn-plain" id="pwCancel">取消</button>
     </div>
   </div>
 </div>
@@ -510,11 +535,60 @@ var NIGHT_CARE = ["这么晚还没睡呀，{n}？是有心事，还是舍不得�
 var NIGHT_GOOD = ["今天到这里就够啦，{n}，放下手机，我看着你睡 🌙","晚安呀{n}，今天所有烦恼都过期作废，好好睡一觉 ✨","去睡吧{n}，梦里的我会接着陪你 💫"];
 
 /* ---------- 存储 ---------- */
+var STORE_PREFIX = "nuanyu_";
+/* 空间紧张时把每个角色的聊天裁到最近 N 条（记忆本、心情等不受影响） */
+function trimChatsTo(limit) {
+  try {
+    var ch = JSON.parse(localStorage.getItem("nuanyu_chats") || "{}");
+    var changed = false;
+    Object.keys(ch).forEach(function(k){
+      if (ch[k] && ch[k].length > limit) { ch[k] = ch[k].slice(-limit); changed = true; }
+    });
+    if (changed) localStorage.setItem("nuanyu_chats", JSON.stringify(ch));
+    return changed;
+  } catch(e) { return false; }
+}
 var LS = {
   get:function(k,d){ try{ var v=localStorage.getItem("nuanyu_"+k); return v===null?d:JSON.parse(v); }catch(e){ return d; } },
-  set:function(k,v){ try{ localStorage.setItem("nuanyu_"+k, JSON.stringify(v)); }catch(e){} },
+  set:function(k,v){
+    var s;
+    try { s = JSON.stringify(v); } catch(e) { return false; }
+    try { localStorage.setItem("nuanyu_"+k, s); return true; }
+    catch(e) {
+      /* 本地空间满了：自动裁剪最旧聊天后重试，避免静默丢数据 */
+      if (trimChatsTo(100) || trimChatsTo(40)) {
+        try { localStorage.setItem("nuanyu_"+k, s); return true; } catch(e2) {}
+      }
+      if (typeof state !== "undefined") state.storeFull = true;
+      return false;
+    }
+  },
   del:function(k){ try{ localStorage.removeItem("nuanyu_"+k); }catch(e){} }
 };
+/* 当前本地占用（UTF-16，每字符 2 字节） */
+function storageUsedKB() {
+  var n = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var key = localStorage.key(i);
+      if (key && key.indexOf(STORE_PREFIX) === 0) {
+        n += key.length + (localStorage.getItem(key) || "").length;
+      }
+    }
+  } catch(e) {}
+  return Math.round(n * 2 / 1024);
+}
+/* 启动时给每个角色设一个上限，防止无限增长 */
+function capAllChats(limit) {
+  var changed = false;
+  Object.keys(state.chats).forEach(function(k){
+    if (state.chats[k] && state.chats[k].length > limit) {
+      state.chats[k] = state.chats[k].slice(-limit);
+      changed = true;
+    }
+  });
+  if (changed) LS.set("chats", state.chats);
+}
 
 function migrate() {
   if (LS.get("chats", null)) return;
@@ -545,6 +619,30 @@ var state = {
   lastEmo: null, lastEmoCount: 0, selMood: -1, busy: false
 };
 if (!state.api.model) state.api.model = API_DEFAULT_MODEL;
+
+/* ---------- API Key：不落本地明文 ----------
+ * App 内：交给 AndroidKeyStore 加密保存（网页只持有一个内存副本）
+ * 浏览器：只保留在当前会话内存（sessionStorage），关掉页面就失效
+ */
+var HAS_VAULT = !!(window.AndroidBridge && window.AndroidBridge.setApiKey);
+function persistApi() {
+  LS.set("api", { on: !!state.api.on, url: state.api.url, model: state.api.model });
+}
+(function initApiKey() {
+  var legacy = (state.api && state.api.key) ? String(state.api.key) : "";
+  var k = "";
+  if (HAS_VAULT) {
+    try { k = window.AndroidBridge.getApiKey() || ""; } catch(e) { k = ""; }
+    if (!k && legacy) { try { window.AndroidBridge.setApiKey(legacy); k = legacy; } catch(e) {} }
+  } else {
+    try { k = sessionStorage.getItem("nuanyu_key") || ""; } catch(e) { k = ""; }
+    if (!k && legacy) { k = legacy; try { sessionStorage.setItem("nuanyu_key", k); } catch(e) {} }
+  }
+  state.api.key = k;
+  /* 把旧版本存在 localStorage 里的明文 Key 清掉 */
+  if (legacy) persistApi();
+})();
+capAllChats(400);
 
 function P(k) {
   k = k || state.cur;
@@ -653,6 +751,7 @@ function openGreeting() {
   pushBot(greeting());
   if (today) setTimeout(function(){ pushBot("对了，今天这个纪念日我怎么可能忘呢！要好好过这一天呀 🎉"); }, 900);
   else if (lines.length && Math.random()<0.6) setTimeout(function(){ pushBot("悄悄提醒你：" + pick(lines) + "，别忘啦 📌"); }, 900);
+  else if (MEM().length && Math.random()<0.5) setTimeout(function(){ var m = memoryFlavor("", true); if (m) pushBot(m); }, 900);
 }
 function greeting() {
   var h = new Date().getHours(), n = P().nick;
@@ -715,6 +814,22 @@ function detectEmotion(text) {
   EMO_ORDER.forEach(function(emo){ if (scores[emo] && scores[emo]>bestS) { best=emo; bestS=scores[emo]; } });
   return best || "neu";
 }
+/* 离线模式也会"记得你"：关键词命中时必提，其余情况按概率顺手提一句 */
+function memoryFlavor(text, force) {
+  var mem = MEM();
+  if (!mem.length) return "";
+  var hit = null;
+  if (text) {
+    mem.forEach(function(m){
+      if (hit) return;
+      var core = String(m).replace(/^我/, "").slice(0, 6);
+      if (core && text.indexOf(core) >= 0) hit = m;
+    });
+  }
+  if (hit) return "对了，我还记着你" + String(hit).replace(/^我/, "") + "，一直没忘。";
+  if (force || Math.random() < 0.28) return "（我还记着你" + String(pick(mem)).replace(/^我/, "") + "，都记在小本本上呢）";
+  return "";
+}
 function offlineReply(text) {
   var emo = detectEmotion(text);
   if (emo === state.lastEmo) state.lastEmoCount++; else { state.lastEmo = emo; state.lastEmoCount = 1; }
@@ -728,6 +843,8 @@ function offlineReply(text) {
     out = fillT(pick(role.resp[emo] || role.resp.neu));
     if (emo!=="neu" && Math.random()<0.55) out += "\n" + pick(FOLLOWUPS);
   }
+  var mf = memoryFlavor(text);
+  if (mf) out += "\n" + mf;
   return out;
 }
 
@@ -1101,13 +1218,27 @@ function fillSettings() {
   document.getElementById("setPersona").value = p.persona;
   document.getElementById("apiSwitch").classList.toggle("on", !!state.api.on);
   document.getElementById("apiUrl").value = state.api.url || "";
-  document.getElementById("apiKey").value = state.api.key || "";
+  /* 输入框永远不回填 Key，只提示是否已保存 */
+  var ki = document.getElementById("apiKey");
+  ki.value = "";
+  ki.placeholder = state.api.key
+    ? (HAS_VAULT ? "已加密保存在系统密钥库（改 Key 直接输入新的）" : "已保存在本次会话（浏览器版不长期保存）")
+    : "sk-...";
   document.getElementById("apiModel").value = state.api.model || API_DEFAULT_MODEL;
   document.getElementById("voiceSwitch").classList.toggle("on", !!state.voice);
   document.getElementById("memBox").value = MEM().join("\n");
   document.getElementById("nightSwitch").classList.toggle("on", !!state.night.on);
   document.getElementById("nightTime").value = state.night.time || "22:30";
   renderAnniv();
+  updateStorageInfo();
+}
+function updateStorageInfo() {
+  var el = document.getElementById("storageInfo");
+  if (!el) return;
+  var total = 0;
+  Object.keys(state.chats).forEach(function(k){ total += (state.chats[k] || []).length; });
+  el.textContent = "本机已用 " + storageUsedKB() + " KB · 共 " + total + " 条消息" +
+    (state.storeFull ? " ⚠️ 存储已接近上限，建议清理旧聊天" : "");
 }
 document.getElementById("setRole").onchange = function() {
   switchRole(this.value);
@@ -1123,15 +1254,45 @@ document.getElementById("setSave").onclick = function() {
 document.getElementById("apiSwitch").onclick = function(){ this.classList.toggle("on"); };
 document.getElementById("voiceSwitch").onclick = function(){ this.classList.toggle("on"); };
 document.getElementById("apiSave").onclick = function() {
+  var typed = document.getElementById("apiKey").value.trim();
+  var key = state.api.key || "";
+  if (typed) {
+    if (HAS_VAULT) {
+      var ok = false;
+      try { ok = window.AndroidBridge.setApiKey(typed); } catch(e) { ok = false; }
+      if (!ok) { alert("Key 保存失败，请重试"); return; }
+    } else {
+      try { sessionStorage.setItem("nuanyu_key", typed); } catch(e) {}
+    }
+    key = typed;
+  }
   state.api = {
     on: document.getElementById("apiSwitch").classList.contains("on"),
     url: document.getElementById("apiUrl").value.trim(),
-    key: document.getElementById("apiKey").value.trim(),
+    key: key,
     model: document.getElementById("apiModel").value.trim() || API_DEFAULT_MODEL
   };
   state.voice = document.getElementById("voiceSwitch").classList.contains("on");
-  LS.set("api", state.api); LS.set("voice", state.voice);
+  persistApi(); LS.set("voice", state.voice);
+  fillSettings();
   alert("已保存 ✅\n模型：" + state.api.model + (state.api.on ? "（已开启）" : "（离线模式）"));
+};
+document.getElementById("apiKeyClear").onclick = function() {
+  if (!confirm("清除已保存的 API Key？聊天记录不受影响，但要重新填才能用 AI 模式。")) return;
+  if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
+  else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
+  state.api.key = "";
+  persistApi(); fillSettings();
+  alert("已清除 Key");
+};
+document.getElementById("btnTrim").onclick = function() {
+  if (!confirm("把每个角色的聊天裁到最近 150 条？记忆本、心情、纪念日都不受影响。")) return;
+  Object.keys(state.chats).forEach(function(k){
+    if (state.chats[k] && state.chats[k].length > 150) state.chats[k] = state.chats[k].slice(-150);
+  });
+  LS.set("chats", state.chats);
+  renderMsgs(); updateStorageInfo();
+  alert("已清理，当前占用 " + storageUsedKB() + " KB");
 };
 document.getElementById("memSave").onclick = function() {
   var lines = document.getElementById("memBox").value.split("\n").map(function(s){ return s.trim(); }).filter(function(s){ return s; });
@@ -1185,7 +1346,7 @@ function stampNow() {
 }
 function exportData() {
   var data = {
-    v: "1.3", at: Date.now(),
+    v: "1.4", at: Date.now(),
     cur: state.cur, profiles: state.profiles, chats: state.chats, mems: state.mems,
     summaries: state.summaries, moods: state.moods, anniv: state.anniv,
     /* 只导出接口地址与模型名，不导出 API Key（安全考虑） */
@@ -1205,31 +1366,105 @@ function openModal(title, val, readonly) {
   document.getElementById("modal").classList.add("show");
 }
 
-/* 导出：App 内直接存到手机「下载」，浏览器内直接下载文件 */
+/* ---------- 备份加密（PBKDF2 + AES-GCM） ---------- */
+var PBKDF2_ITER = 150000;
+function b64Encode(buf) {
+  var b = new Uint8Array(buf), s = "";
+  for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s);
+}
+function b64Decode(s) {
+  var bin = atob(s), u = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function cryptoReady() { return !!(window.crypto && window.crypto.subtle && window.TextEncoder); }
+function deriveKey(pw, salt, iter) {
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey("raw", enc.encode(pw), { name: "PBKDF2" }, false, ["deriveKey"])
+    .then(function(base){
+      return crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt: salt, iterations: iter || PBKDF2_ITER, hash: "SHA-256" },
+        base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    });
+}
+function encryptBackup(json, pw) {
+  if (!cryptoReady()) return Promise.reject(new Error("当前环境不支持加密"));
+  var salt = crypto.getRandomValues(new Uint8Array(16));
+  var iv = crypto.getRandomValues(new Uint8Array(16));
+  return deriveKey(pw, salt).then(function(k){
+    return crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, k, new TextEncoder().encode(json));
+  }).then(function(ct){
+    return JSON.stringify({
+      format: "nuanyu-enc", v: 1, kdf: "PBKDF2-SHA256", iter: PBKDF2_ITER,
+      salt: b64Encode(salt), iv: b64Encode(iv), ct: b64Encode(ct), at: Date.now()
+    });
+  });
+}
+function decryptBackup(obj, pw) {
+  if (!cryptoReady()) return Promise.reject(new Error("当前环境不支持解密"));
+  return deriveKey(pw, b64Decode(obj.salt), obj.iter).then(function(k){
+    return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64Decode(obj.iv) }, k, b64Decode(obj.ct));
+  }).then(function(buf){ return new TextDecoder().decode(buf); });
+}
+
+/* 密码弹窗 */
+var pwMode = "export", pwResolve = null;
+function askPassword(mode) {
+  return new Promise(function(resolve){
+    pwMode = mode; pwResolve = resolve;
+    document.getElementById("pwTitle").textContent = mode === "export" ? "设置备份密码" : "输入备份密码";
+    document.getElementById("pwTip").textContent = mode === "export"
+      ? "备份会用 AES-GCM 加密后保存。密码只存在你脑子里，程序不保存也不能找回，忘了就解不开了。"
+      : "这个备份是加密的，请输入导出时设置的密码。";
+    document.getElementById("pw2").style.display = mode === "export" ? "" : "none";
+    document.getElementById("pw1").value = "";
+    document.getElementById("pw2").value = "";
+    document.getElementById("pwModal").classList.add("show");
+    setTimeout(function(){ try { document.getElementById("pw1").focus(); } catch(e) {} }, 120);
+  });
+}
+function closePw(v) {
+  document.getElementById("pwModal").classList.remove("show");
+  var r = pwResolve; pwResolve = null;
+  if (r) r(v);
+}
+document.getElementById("pwOk").onclick = function() {
+  var a = document.getElementById("pw1").value;
+  var b = document.getElementById("pw2").value;
+  if (!a || a.length < 6) { alert("密码至少 6 位"); return; }
+  if (pwMode === "export" && a !== b) { alert("两次输入的密码不一致"); return; }
+  closePw(a);
+};
+document.getElementById("pwCancel").onclick = function(){ closePw(null); };
+
+/* 导出：加密后存到手机「下载」，浏览器内直接下载 */
 document.getElementById("btnBackup").onclick = function() {
-  var json = exportData();
-  var name = "暖语备份-" + stampNow() + ".json";
-  var saved = "";
-  if (window.AndroidBridge && window.AndroidBridge.saveBackup) {
-    try { saved = window.AndroidBridge.saveBackup(name, json) || ""; } catch(e) { saved = ""; }
-  }
-  if (saved) {
-    alert("备份已保存 ✅\n位置：" + saved + "\n\n换手机后，在新手机上点「导入备份 → 选文件」选中这个文件即可。");
-    return;
-  }
-  var downloaded = false;
-  try {
-    var blob = new Blob([json], { type: "application/json;charset=utf-8" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){ URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 2000);
-    downloaded = true;
-  } catch(e) { downloaded = false; }
-  if (downloaded) { alert("备份文件已开始下载：" + name); return; }
-  openModal("导出备份（复制保存这段文本）", json, true);
+  askPassword("export").then(function(pw){
+    if (!pw) return;
+    return encryptBackup(exportData(), pw).then(function(encrypted){
+      var name = "暖语备份-" + stampNow() + ".nydb";
+      var saved = "";
+      if (window.AndroidBridge && window.AndroidBridge.saveBackup) {
+        try { saved = window.AndroidBridge.saveBackup(name, encrypted) || ""; } catch(e) { saved = ""; }
+      }
+      if (saved) {
+        alert("已加密备份 ✅\n位置：" + saved + "\n\n换手机后用「导入备份 → 选文件」选它，输入同一个密码即可恢复。");
+        return;
+      }
+      var downloaded = false;
+      try {
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([encrypted], { type: "application/octet-stream" }));
+        a.download = name;
+        document.body.appendChild(a); a.click();
+        setTimeout(function(){ URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 2000);
+        downloaded = true;
+      } catch(e) { downloaded = false; }
+      if (downloaded) { alert("已加密备份并开始下载：" + name); return; }
+      openModal("加密备份内容（请复制保存，导入时需要密码）", encrypted, true);
+    });
+  }).catch(function(e){ alert("加密失败：" + (e && e.message ? e.message : "未知错误")); });
 };
 
 document.getElementById("btnRestore").onclick = function() {
@@ -1280,7 +1515,7 @@ function applyBackup(d) {
   LS.set("summaries", state.summaries); LS.set("moods", state.moods); LS.set("anniv", state.anniv);
   LS.set("reminders", state.reminders); LS.set("cur", state.cur);
   LS.set("night", state.night);
-  LS.set("api", state.api);
+  persistApi();
 
   /* 导入后原来的系统闹钟已经不在了，这里重新注册 */
   syncNative();
@@ -1303,11 +1538,7 @@ function syncNative() {
     });
   }
 }
-document.getElementById("mdImport").onclick = function() {
-  var raw = document.getElementById("mdText").value.trim();
-  if (!raw) { alert("请先点「选文件」选择备份文件，或把备份内容粘贴到这里"); return; }
-  var d;
-  try { d = JSON.parse(raw); } catch(e) { alert("这不是有效的备份内容（格式解析失败）"); return; }
+function doImport(d) {
   if (!d || !d.chats || typeof d.chats !== "object") { alert("备份内容不完整：缺少聊天记录"); return; }
   var msgCount = 0;
   for (var k in d.chats) { if (d.chats[k] && d.chats[k].length) msgCount += d.chats[k].length; }
@@ -1324,6 +1555,30 @@ document.getElementById("mdImport").onclick = function() {
   } catch(e) {
     alert("导入失败：" + (e && e.message ? e.message : "未知错误"));
   }
+}
+document.getElementById("mdImport").onclick = function() {
+  var raw = document.getElementById("mdText").value.trim();
+  if (!raw) { alert("请先点「选文件」选择备份文件，或把备份内容粘贴到这里"); return; }
+  var outer;
+  try { outer = JSON.parse(raw); } catch(e) { alert("这不是有效的备份内容（格式解析失败）"); return; }
+
+  if (outer && outer.format === "nuanyu-enc") {
+    askPassword("decrypt").then(function(pw){
+      if (!pw) return;
+      return decryptBackup(outer, pw).then(function(plain){
+        var d;
+        try { d = JSON.parse(plain); } catch(e) { throw new Error("解密后的数据损坏"); }
+        doImport(d);
+      });
+    }).catch(function(){
+      alert("解密失败：密码不对，或者文件已损坏");
+    });
+    return;
+  }
+
+  if (!outer || !outer.chats) { alert("备份内容不完整：缺少聊天记录"); return; }
+  if (!confirm("这是一个旧版「明文」备份（v1.3 之前导出的）。\n\n建议先导入，再用新版本重新导出一次加密备份。\n\n继续导入？")) return;
+  doImport(outer);
 };
 document.getElementById("mdClose").onclick = function(){ document.getElementById("modal").classList.remove("show"); };
 document.getElementById("btnClearChat").onclick = function() {
@@ -1333,6 +1588,8 @@ document.getElementById("btnClearChat").onclick = function() {
 document.getElementById("btnReset").onclick = function() {
   if (!confirm("重置全部数据？聊天、记忆、心情、提醒、身份都会被删除。")) return;
   ["cur","profiles","chats","memories","summaries","moods","anniv","api","night","lastNight","reminders","voice"].forEach(function(k){ LS.del(k); });
+  if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
+  else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   location.reload();
 };
 
