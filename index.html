@@ -305,7 +305,7 @@
       <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnReset">重置全部数据</button></div>
     </div>
 
-    <div class="ver-tip">暖语 v1.2 · 多角色情感陪伴智能体<br>qwen3.7-max · 长期记忆 · 工具调用 · 语音播报 · 离线可用</div>
+    <div class="ver-tip">暖语 v1.3 · 多角色情感陪伴智能体<br>qwen3.7-max · 长期记忆 · 工具调用 · 语音播报 · 离线可用</div>
   </div>
 
   <div class="tabbar">
@@ -331,8 +331,10 @@
   <div class="md-body">
     <h3 id="mdTitle">数据备份</h3>
     <textarea id="mdText" placeholder="在此粘贴备份内容后点「导入」"></textarea>
+    <input type="file" id="mdFile" accept=".json,application/json" style="display:none">
     <div class="md-actions">
       <button class="btn-plain" id="mdCopy">复制</button>
+      <button class="btn-plain" id="mdPick">选文件</button>
       <button class="btn-plain" id="mdImport">导入</button>
       <button class="btn-plain" id="mdClose">关闭</button>
     </div>
@@ -1177,53 +1179,151 @@ document.getElementById("nightSave").onclick = function() {
 };
 
 /* 备份 */
+function stampNow() {
+  var d = new Date(), p = function(n){ return (n < 10 ? "0" : "") + n; };
+  return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes());
+}
 function exportData() {
   var data = {
-    v: "1.2", at: Date.now(),
+    v: "1.3", at: Date.now(),
     cur: state.cur, profiles: state.profiles, chats: state.chats, mems: state.mems,
     summaries: state.summaries, moods: state.moods, anniv: state.anniv,
+    /* 只导出接口地址与模型名，不导出 API Key（安全考虑） */
     api: { on: state.api.on, url: state.api.url, model: state.api.model },
     night: state.night, reminders: state.reminders
   };
   return JSON.stringify(data);
 }
+
+function openModal(title, val, readonly) {
+  document.getElementById("mdTitle").textContent = title;
+  var t = document.getElementById("mdText");
+  t.value = val; t.readOnly = !!readonly;
+  document.getElementById("mdCopy").style.display = readonly ? "" : "none";
+  document.getElementById("mdPick").style.display = readonly ? "none" : "";
+  document.getElementById("mdImport").style.display = readonly ? "none" : "";
+  document.getElementById("modal").classList.add("show");
+}
+
+/* 导出：App 内直接存到手机「下载」，浏览器内直接下载文件 */
 document.getElementById("btnBackup").onclick = function() {
-  document.getElementById("mdTitle").textContent = "导出备份（复制保存这段文本）";
-  document.getElementById("mdText").value = exportData();
-  document.getElementById("mdText").readOnly = true;
-  document.getElementById("modal").classList.add("show");
+  var json = exportData();
+  var name = "暖语备份-" + stampNow() + ".json";
+  var saved = "";
+  if (window.AndroidBridge && window.AndroidBridge.saveBackup) {
+    try { saved = window.AndroidBridge.saveBackup(name, json) || ""; } catch(e) { saved = ""; }
+  }
+  if (saved) {
+    alert("备份已保存 ✅\n位置：" + saved + "\n\n换手机后，在新手机上点「导入备份 → 选文件」选中这个文件即可。");
+    return;
+  }
+  var downloaded = false;
+  try {
+    var blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); if (a.parentNode) a.parentNode.removeChild(a); }, 2000);
+    downloaded = true;
+  } catch(e) { downloaded = false; }
+  if (downloaded) { alert("备份文件已开始下载：" + name); return; }
+  openModal("导出备份（复制保存这段文本）", json, true);
 };
+
 document.getElementById("btnRestore").onclick = function() {
-  document.getElementById("mdTitle").textContent = "导入备份（粘贴后点导入）";
-  document.getElementById("mdText").value = "";
-  document.getElementById("mdText").readOnly = false;
-  document.getElementById("modal").classList.add("show");
+  openModal("导入备份：选择文件，或把备份内容粘贴到下面", "", false);
 };
 document.getElementById("mdCopy").onclick = function() {
   var t = document.getElementById("mdText");
   t.select(); t.setSelectionRange(0, 999999);
-  try { document.execCommand("copy"); alert("已复制 ✅"); } catch(e) { alert("请长按选择复制"); }
+  var ok = false;
+  try { ok = document.execCommand("copy"); } catch(e) { ok = false; }
+  if (ok) { alert("已复制 ✅"); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t.value).then(function(){ alert("已复制 ✅"); }, function(){ alert("请长按选择文字复制"); });
+    return;
+  }
+  alert("请长按选择文字复制");
 };
+document.getElementById("mdPick").onclick = function() {
+  document.getElementById("mdFile").click();
+};
+document.getElementById("mdFile").onchange = function() {
+  var f = this.files && this.files[0];
+  if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function() {
+    var t = document.getElementById("mdText");
+    t.value = String(reader.result || "");
+    t.readOnly = false;
+  };
+  reader.readAsText(f, "utf-8");
+  this.value = "";
+};
+function applyBackup(d) {
+  var now = Date.now();
+  state.profiles = d.profiles || state.profiles;
+  state.chats = d.chats || {};
+  state.mems = d.mems || {};
+  state.summaries = d.summaries || {};
+  state.moods = d.moods || [];
+  state.anniv = d.anniv || [];
+  /* 丢弃一天前已过期的提醒，保留未到期的 */
+  state.reminders = (d.reminders || []).filter(function(r){ return r && r.id && r.ts && r.ts > now - 86400000; });
+  if (d.night) state.night = { on: !!d.night.on, time: d.night.time || "22:30" };
+  if (d.api) { state.api.url = d.api.url || ""; state.api.model = d.api.model || API_DEFAULT_MODEL; }
+  if (d.cur) state.cur = d.cur;
+
+  LS.set("profiles", state.profiles); LS.set("chats", state.chats); LS.set("memories", state.mems);
+  LS.set("summaries", state.summaries); LS.set("moods", state.moods); LS.set("anniv", state.anniv);
+  LS.set("reminders", state.reminders); LS.set("cur", state.cur);
+  LS.set("night", state.night);
+  LS.set("api", state.api);
+
+  /* 导入后原来的系统闹钟已经不在了，这里重新注册 */
+  syncNative();
+}
+/* 把本地数据同步成系统的闹钟（晚安 + 提醒） */
+function syncNative() {
+  if (!window.AndroidBridge) return;
+  var now = Date.now();
+  if (window.AndroidBridge.scheduleGoodnight) {
+    try {
+      var p = String((state.night && state.night.time) || "22:30").split(":");
+      window.AndroidBridge.scheduleGoodnight(parseInt(p[0], 10) || 22, parseInt(p[1], 10) || 30, !!(state.night && state.night.on));
+    } catch(e) {}
+  }
+  if (window.AndroidBridge.scheduleReminder) {
+    (state.reminders || []).forEach(function(r){
+      if (r && r.id && r.ts > now) {
+        try { window.AndroidBridge.scheduleReminder(r.id, "暖语提醒", r.title, String(r.ts)); } catch(e) {}
+      }
+    });
+  }
+}
 document.getElementById("mdImport").onclick = function() {
-  if (document.getElementById("mdText").readOnly) { document.getElementById("modal").classList.remove("show"); return; }
+  var raw = document.getElementById("mdText").value.trim();
+  if (!raw) { alert("请先点「选文件」选择备份文件，或把备份内容粘贴到这里"); return; }
+  var d;
+  try { d = JSON.parse(raw); } catch(e) { alert("这不是有效的备份内容（格式解析失败）"); return; }
+  if (!d || !d.chats || typeof d.chats !== "object") { alert("备份内容不完整：缺少聊天记录"); return; }
+  var msgCount = 0;
+  for (var k in d.chats) { if (d.chats[k] && d.chats[k].length) msgCount += d.chats[k].length; }
+  var memCount = d.mems ? Object.keys(d.mems).length : 0;
+  var tip = "导入会覆盖当前的聊天、记忆、心情、纪念日和提醒。\n\n这份备份：" + msgCount + " 条消息、" + memCount + " 份记忆";
+  if (d.at) tip += "、" + new Date(d.at).toLocaleString("zh-CN") + " 导出";
+  tip += "\n\n确定导入？";
+  if (!confirm(tip)) return;
   try {
-    var d = JSON.parse(document.getElementById("mdText").value);
-    if (!d.chats) throw new Error("bad");
-    state.profiles = d.profiles || state.profiles;
-    state.chats = d.chats || {};
-    state.mems = d.mems || {};
-    state.summaries = d.summaries || {};
-    state.moods = d.moods || [];
-    state.anniv = d.anniv || [];
-    state.reminders = d.reminders || [];
-    if (d.cur) state.cur = d.cur;
-    LS.set("profiles", state.profiles); LS.set("chats", state.chats); LS.set("memories", state.mems);
-    LS.set("summaries", state.summaries); LS.set("moods", state.moods); LS.set("anniv", state.anniv);
-    LS.set("reminders", state.reminders); LS.set("cur", state.cur);
+    applyBackup(d);
     document.getElementById("modal").classList.remove("show");
-    alert("导入成功 ✅");
+    alert("导入成功 ✅ 正在重新载入…");
     location.reload();
-  } catch(e) { alert("备份内容格式不对"); }
+  } catch(e) {
+    alert("导入失败：" + (e && e.message ? e.message : "未知错误"));
+  }
 };
 document.getElementById("mdClose").onclick = function(){ document.getElementById("modal").classList.remove("show"); };
 document.getElementById("btnClearChat").onclick = function() {
@@ -1282,6 +1382,8 @@ Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), functi
 /* ---------- 启动 ---------- */
 renderOnboarding();
 if (state.cur && ROLES[state.cur]) startApp(false);
+/* 每次启动把提醒与晚安闹钟跟本地数据对齐一次，重装/清数据后也能自动恢复 */
+setTimeout(syncNative, 900);
 </script>
 </body>
 </html>
