@@ -234,6 +234,28 @@
   .rs-item .ri-name { font-size:14px; font-weight:600; }
   .rs-item .ri-tag { font-size:11px; color:#a08a93; margin-top:1px; }
   .rs-close { margin-top:14px; }
+  #apiSheet, #moreSheet {
+    position:fixed; inset:0; z-index:60; background:rgba(60,40,50,.35); display:none;
+    align-items:flex-end;
+  }
+  #apiSheet.show, #moreSheet.show { display:flex; }
+
+  /* 角色主页（每个角色自己的设置） */
+  #page-role {
+    position:absolute; top:0; left:0; right:0; bottom:0; z-index:35;
+    background:#fdf6f8; display:none; flex-direction:column;
+  }
+  #page-role.show { display:flex; animation:slideIn .22s ease-out; }
+  #page-role .role-body { flex:1; overflow-y:auto; padding:14px 14px calc(18px + env(safe-area-inset-bottom)); min-height:0; }
+  #chatProfile {
+    margin-left:auto; width:32px; height:32px; border:none; flex-shrink:0;
+    background:#fff2f6; border-radius:50%; font-size:15px; color:#e0577f;
+  }
+  .hh-tools { display:flex; gap:9px; align-items:center; }
+  #btnMore {
+    background:linear-gradient(135deg,#d9c3cd,#c9abbd);
+    box-shadow:0 4px 12px rgba(180,140,160,.25); font-size:17px;
+  }
 
   /* 弹窗 */
   #modal { position:fixed; inset:0; z-index:70; background:rgba(60,40,50,.4); display:none; align-items:center; justify-content:center; padding:20px; }
@@ -281,7 +303,10 @@
         <div class="hh-sub" id="hhSub">每个角色一个独立对话框</div>
         <button class="mode-chip" id="modeChip"><span class="dot"></span><span id="modeChipText">检测中…</span></button>
       </div>
-      <button class="hh-add" id="btnAddRole">＋</button>
+      <div class="hh-tools">
+        <button class="hh-add" id="btnMore" title="数据与推送">⚙</button>
+        <button class="hh-add" id="btnAddRole">＋</button>
+      </div>
     </div>
     <div id="sessionList"></div>
   </div>
@@ -295,6 +320,7 @@
         <div class="c-name" id="headName">小暖</div>
         <div class="c-status" id="headStatus">闺蜜 · 在线</div>
       </div>
+      <button id="chatProfile" title="角色主页">✏️</button>
     </div>
     <div id="msgs"></div>
     <div class="input-bar">
@@ -327,96 +353,77 @@
     <div id="rmList"></div>
   </div>
 
-  <!-- 设置 -->
-  <div class="page scroll-page" id="page-set">
-    <div class="sec-title">设置</div>
-    <div class="sec-sub">所有数据只保存在本机</div>
-
-    <div class="set-card">
-      <h3 id="setCardTitle">身份设定</h3>
-      <div class="set-row"><label>要编辑的角色</label>
-        <select id="setRole"></select>
+  <!-- 角色主页：每个角色自己的设定、记忆、纪念日、数据 -->
+  <div id="page-role">
+    <div class="chat-head">
+      <button class="back-btn" id="roleBack">‹</button>
+      <button class="avatar" id="roleAvatar">💕</button>
+      <div>
+        <div class="c-name" id="roleName">小暖</div>
+        <div class="c-status" id="roleSub">角色主页</div>
       </div>
-      <div class="set-row"><label>TA 的名字</label><input id="setBotName"></div>
-      <div class="set-row"><label>TA 对你的称呼</label><input id="setNick"></div>
-      <div class="set-row"><label>人设描述（强烈影响 AI 模式的语气）</label>
-        <textarea id="setPersona" style="height:80px" placeholder="描述 TA 的性格、说话风格、你们的关系"></textarea>
-      </div>
-      <button class="btn-plain" id="setSave">保存身份设定</button>
     </div>
+    <div class="role-body">
 
-    <div class="set-card">
-      <h3>AI 模型（qwen3.7-max）</h3>
-      <div class="switch-row">
-        <span>启用大模型对话（关闭则用离线话术）</span>
-        <button class="switch" id="apiSwitch"></button>
+      <div class="set-card">
+        <h3 id="setCardTitle">身份设定</h3>
+        <div class="set-row"><label>头像（emoji，列表和聊天框都会用）</label><input id="setEmoji" maxlength="4" placeholder="💕"></div>
+        <div class="set-row"><label>TA 的名字</label><input id="setBotName"></div>
+        <div class="set-row"><label>TA 对你的称呼</label><input id="setNick"></div>
+        <div class="set-row"><label>人设描述（强烈影响 AI 模式的语气）</label>
+          <textarea id="setPersona" style="height:80px" placeholder="描述 TA 的性格、说话风格、你们的关系"></textarea>
+        </div>
+        <button class="btn-plain" id="setSave">保存身份设定</button>
       </div>
-      <div class="set-row"><label>接口地址（OpenAI 兼容）</label><input id="apiUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
-      <div class="set-row"><label>API Key（App 内加密保存）</label><input id="apiKey" type="password" placeholder="sk-... 或访问令牌"></div>
-      <div class="switch-row" id="rememberRow" style="display:none">
-        <span>网页记住访问令牌（免得每次重填）<span style="display:block;font-size:10px;color:#b59aa5">只对自建代理地址（以 /api 结尾）生效；百炼原始 Key 不会记住</span></span>
-        <button class="switch" id="apiRemember"></button>
+
+      <div class="set-card">
+        <h3 id="memCardTitle">TA 的记忆本 🧠</h3>
+        <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6;margin-bottom:8px" id="memHealth"></div>
+        <div class="set-row"><textarea id="memBox" style="height:100px" placeholder="一行一条，例如：&#10;喜欢深夜听歌&#10;在准备期末考试"></textarea></div>
+        <button class="btn-plain" id="memSave">保存记忆本</button>
+        <button class="btn-plain" id="btnReanchor" style="margin-top:8px">🧷 重新锚定人设（聊歪了用这个）</button>
+        <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:8px">
+          聊得越久，旧对话会被压缩成摘要，偶尔会「记岔」或跑偏。锚定会清掉旧摘要、从原文重算，并把人设卡完整重新注入——TA 会回到一开始的样子。
+        </div>
       </div>
-      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin:-4px 0 8px">
-        App 内 Key 由系统密钥库加密保存，明文不写进本地存储。浏览器版默认只在本次会话内保留，关掉就没；若填的是自建代理的访问令牌，可打开下面的开关长期记住。留空表示沿用已保存的。
+
+      <div class="set-card">
+        <h3>纪念日 📌（这个角色的）</h3>
+        <div class="set-row"><label>名称</label><input id="annivName" placeholder="例如：我们认识的日子"></div>
+        <div class="set-row"><label>日期（每年循环）</label><input id="annivDate" type="date"></div>
+        <button class="btn-plain" id="annivAdd">＋ 添加纪念日</button>
+        <div id="annivList" style="margin-top:10px"></div>
       </div>
-      <div class="set-row"><label>模型名</label><input id="apiModel" placeholder="qwen3.7-max"></div>
-      <div class="switch-row" style="margin-top:12px">
-        <span>语音播报（TA 的话念出来）</span>
-        <button class="switch" id="voiceSwitch"></button>
+
+      <div class="set-card">
+        <h3>体验</h3>
+        <div class="switch-row">
+          <span>语音播报（TA 的话念出来，只对这个角色生效）</span>
+          <button class="switch" id="voiceSwitch"></button>
+        </div>
       </div>
-      <button class="btn-plain" id="apiSave">保存模型设置</button>
-      <button class="btn-plain" id="apiTest" style="margin-top:8px">🔍 测试连接（验证模型是否真的通）</button>
-      <div class="test-out" id="apiTestOut"></div>
-      <div class="set-row" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px" id="apiModeLine"></div>
-      <button class="btn-plain btn-danger" id="apiKeyClear" style="margin-top:8px">清除已保存的 Key</button>
+
+      <div class="set-card">
+        <h3>对话数据</h3>
+        <div class="set-row" style="font-size:12px;color:#b59aa5" id="roleStats"></div>
+        <div class="set-row"><button class="btn-plain" id="btnExportChat">导出这个角色的聊天记录</button></div>
+        <div class="set-row"><button class="btn-plain btn-danger" id="btnClearChat">清空这个角色的聊天</button></div>
+        <div class="set-row"><button class="btn-plain btn-danger" id="btnRemoveRole">从消息列表移除该角色</button></div>
+      </div>
+
+      <div class="set-card">
+        <h3>全局设置</h3>
+        <div class="set-row"><button class="btn-plain" id="btnGoApi">AI 模型设置（所有角色共用）›</button></div>
+        <div class="set-row" style="margin-top:8px"><button class="btn-plain" id="btnGoMore">备份 · 晚安推送 · 全部重置 ›</button></div>
+      </div>
+
     </div>
-
-    <div class="set-card">
-      <h3 id="memCardTitle">TA 的记忆本 🧠</h3>
-      <div class="set-row" style="font-size:12px;color:#b59aa5;line-height:1.6;margin-bottom:8px">
-        AI 模式下 TA 会自己调用「记忆」工具写入；也可以手动补充。每个角色各有一本，互不串台。
-      </div>
-      <div class="set-row"><textarea id="memBox" style="height:100px" placeholder="一行一条，例如：&#10;喜欢深夜听歌&#10;在准备期末考试"></textarea></div>
-      <button class="btn-plain" id="memSave">保存记忆本</button>
-    </div>
-
-    <div class="set-card">
-      <h3>纪念日 📌</h3>
-      <div class="set-row"><label>名称</label><input id="annivName" placeholder="例如：我们认识的日子"></div>
-      <div class="set-row"><label>日期（每年循环）</label><input id="annivDate" type="date"></div>
-      <button class="btn-plain" id="annivAdd">＋ 添加纪念日</button>
-      <div id="annivList" style="margin-top:10px"></div>
-    </div>
-
-    <div class="set-card">
-      <h3>每日晚安推送 🌙</h3>
-      <div class="switch-row"><span>到点推送晚安通知</span><button class="switch" id="nightSwitch"></button></div>
-      <div class="set-row"><label>推送时间</label><input id="nightTime" type="time" value="22:30"></div>
-      <button class="btn-plain" id="nightSave">保存晚安设置</button>
-    </div>
-
-    <div class="set-card">
-      <h3>数据</h3>
-      <div class="set-row" style="display:flex;gap:10px">
-        <button class="btn-plain" id="btnBackup">导出备份</button>
-        <button class="btn-plain" id="btnRestore">导入备份</button>
-      </div>
-      <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnClearChat">清空当前对话框的聊天</button></div>
-      <div class="set-row" style="margin-top:10px"><button class="btn-plain" id="btnTrim">清理旧聊天（每角色留最近 150 条）</button></div>
-      <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnReset">重置全部数据</button></div>
-      <div id="storageInfo" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px"></div>
-      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
-    </div>
-
-    <div class="ver-tip">暖语 v1.8 · 多角色情感陪伴智能体<br>连接自检 · 令牌记忆 · 独立记忆 · 加密备份</div>
   </div>
 
   <div class="tabbar">
     <button class="on" data-tab="page-home"><span class="t-ico">💬</span>消息</button>
     <button data-tab="page-mood"><span class="t-ico">🌈</span>心情</button>
     <button data-tab="page-remind"><span class="t-ico">⏰</span>提醒</button>
-    <button data-tab="page-set"><span class="t-ico">⚙️</span>设置</button>
   </div>
 </div>
 
@@ -427,6 +434,64 @@
     <div class="rs-sub">点一个角色就开一个独立对话框，各自的聊天记录和记忆互不影响</div>
     <div class="rs-grid" id="rsGrid"></div>
     <button class="btn-plain rs-close" id="rsClose">关闭</button>
+  </div>
+</div>
+
+<!-- AI 模型设置（全局，所有角色共用一个 Key） -->
+<div id="apiSheet">
+  <div class="rs-body">
+    <div class="rs-title">AI 模型设置</div>
+    <div class="rs-sub">所有角色共用这一个接口和 Key · qwen3.7-max</div>
+    <div class="switch-row">
+      <span>启用大模型对话（关闭则用离线话术）</span>
+      <button class="switch" id="apiSwitch"></button>
+    </div>
+    <div class="set-row"><label>接口地址（OpenAI 兼容）</label><input id="apiUrl" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"></div>
+    <div class="set-row"><label>API Key（App 内加密保存）</label><input id="apiKey" type="password" placeholder="sk-... 或访问令牌"></div>
+    <div class="switch-row" id="rememberRow" style="display:none">
+      <span>网页记住访问令牌（免得每次重填）<span style="display:block;font-size:10px;color:#b59aa5">只对自建代理地址（以 /api 结尾）生效；百炼原始 Key 不会记住</span></span>
+      <button class="switch" id="apiRemember"></button>
+    </div>
+    <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin:-4px 0 8px">
+      App 内 Key 由系统密钥库加密保存，明文不写进本地存储。浏览器版默认只在本次会话内保留，关掉就没；若填的是自建代理的访问令牌，可打开下面的开关长期记住。留空表示沿用已保存的。
+    </div>
+    <div class="set-row"><label>模型名</label><input id="apiModel" placeholder="qwen3.7-max"></div>
+    <button class="btn-plain" id="apiSave">保存模型设置</button>
+    <button class="btn-plain" id="apiTest" style="margin-top:8px">🔍 测试连接（验证模型是否真的通）</button>
+    <div class="test-out" id="apiTestOut"></div>
+    <div class="set-row" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px" id="apiModeLine"></div>
+    <button class="btn-plain btn-danger" id="apiKeyClear" style="margin-top:8px">清除已保存的 Key</button>
+    <button class="btn-plain rs-close" id="apiClose">关闭</button>
+  </div>
+</div>
+
+<!-- 数据与推送（全局） -->
+<div id="moreSheet">
+  <div class="rs-body">
+    <div class="rs-title">数据与推送</div>
+    <div class="rs-sub">所有数据只保存在本机</div>
+
+    <div class="set-card">
+      <h3>每日晚安推送 🌙</h3>
+      <div class="switch-row"><span>到点推送晚安通知</span><button class="switch" id="nightSwitch"></button></div>
+      <div class="set-row"><label>推送时间</label><input id="nightTime" type="time" value="22:30"></div>
+      <button class="btn-plain" id="nightSave">保存晚安设置</button>
+    </div>
+
+    <div class="set-card">
+      <h3>备份与数据</h3>
+      <div class="set-row" style="display:flex;gap:10px">
+        <button class="btn-plain" id="btnBackup">导出备份</button>
+        <button class="btn-plain" id="btnRestore">导入备份</button>
+      </div>
+      <div class="set-row" style="margin-top:10px"><button class="btn-plain" id="btnTrim">清理旧聊天（每角色留最近 150 条）</button></div>
+      <div class="set-row" style="margin-top:10px"><button class="btn-plain btn-danger" id="btnReset">重置全部数据</button></div>
+      <div id="storageInfo" style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:10px"></div>
+      <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
+    </div>
+
+    <div class="ver-tip">暖语 v1.9 · 多角色情感陪伴智能体<br>角色主页 · 防漂移锚定 · 独立记忆 · 加密备份</div>
+    <button class="btn-plain rs-close" id="moreClose">关闭</button>
   </div>
 </div>
 
@@ -704,7 +769,7 @@ var state = {
   summaries: LS.get("summaries", {}),
   summaryDone: LS.get("summaryDone", {}),
   moods: LS.get("moods", []),
-  anniv: LS.get("anniv", []),
+  annivs: LS.get("annivs", {}),
   api: LS.get("api", { on:false, url:"", key:"", model:"" }),
   night: LS.get("night", { on:false, time:"22:30" }),
   lastNight: LS.get("lastNight", ""),
@@ -718,6 +783,26 @@ var state = {
   lastEmo: null, lastEmoCount: 0, selMood: -1, busy: false
 };
 if (!state.api.model) state.api.model = API_DEFAULT_MODEL;
+
+/* ---------- 老数据迁移 ----------
+ * 纪念日：v1.8 及以前是全局一份 → 迁到当前角色名下，变成每个角色各有一份
+ * 语音播报：原来是全局开关 → 迁成每个角色自己的开关（继承旧值）
+ */
+(function migratePerRole() {
+  var legacy = LS.get("anniv", null);
+  if (Array.isArray(legacy) && legacy.length) {
+    var tgt = (state.cur && ROLES[state.cur]) ? state.cur : "guimi";
+    state.annivs[tgt] = legacy.concat(state.annivs[tgt] || []);
+    LS.set("annivs", state.annivs);
+    LS.del("anniv");
+  }
+  var changed = false;
+  Object.keys(state.profiles).forEach(function(k){
+    var p = state.profiles[k];
+    if (p && typeof p.voice === "undefined") { p.voice = !!state.voice; changed = true; }
+  });
+  if (changed) LS.set("profiles", state.profiles);
+})();
 
 /* ---------- 会话列表初始化 ----------
  * active = 已经在消息列表里的角色（一个角色 = 一个对话框）
@@ -1010,9 +1095,16 @@ function daysUntil(ds) {
   if (t.getTime() < today.getTime()) t = new Date(now.getFullYear()+1, parseInt(p[1],10)-1, parseInt(p[2],10));
   return Math.round((t.getTime()-today.getTime())/86400000);
 }
-function annivLines() {
+function annivOf(k) {
+  k = k || state.cur;
+  if (!state.annivs[k]) state.annivs[k] = [];
+  return state.annivs[k];
+}
+function saveAnnivs() { LS.set("annivs", state.annivs); }
+function annivLines(k) {
+  k = k || state.cur;
   var out = [];
-  state.anniv.forEach(function(a){
+  annivOf(k).forEach(function(a){
     var d = daysUntil(a.date);
     if (d===0) out.push("今天是「"+a.name+"」这个纪念日");
     else if (d===1) out.push("明天就是「"+a.name+"」");
@@ -1022,7 +1114,8 @@ function annivLines() {
 }
 function hasBridge() { return !!(window.AndroidBridge && window.AndroidBridge.speak); }
 function speak(text) {
-  if (!state.voice || !hasBridge()) return;
+  var p = P();
+  if (!p || !p.voice || !hasBridge()) return;
   var t = String(text).replace(/[（(][^）)]*[）)]/g, "").replace(/\n+/g, "，").slice(0, 120);
   if (t) try { window.AndroidBridge.speak(t); } catch(e) {}
 }
@@ -1054,7 +1147,7 @@ document.getElementById("obStart").onclick = function() {
   var nick = document.getElementById("obNick").value.trim() || r.call;
   var persona = document.getElementById("obPersona").value.trim() || r.persona;
   state.cur = selRole;
-  state.profiles[selRole] = { botName:botName, nick:nick, persona:persona };
+  state.profiles[selRole] = { botName:botName, nick:nick, persona:persona, voice:!!state.voice };
   state.active = [selRole];
   LS.set("active", state.active);
   LS.set("cur", selRole); saveProfiles();
@@ -1075,19 +1168,19 @@ function startApp(first) {
     x.classList.toggle("on", x.dataset.tab === "page-home");
   });
   renderSessions();
-  renderMood(); renderReminders(); fillSettings();
+  renderMood(); renderReminders();
 }
 function applyIdentity() {
   var r = ROLES[state.cur] || ROLES.guimi;
   var p = P();
-  document.getElementById("headAvatar").textContent = r.emoji;
+  document.getElementById("headAvatar").textContent = p.emoji || r.emoji;
   document.getElementById("headName").textContent = p.botName;
   refreshModeUI();
   document.title = p.botName + " · 暖语";
 }
 function openGreeting() {
   var h = new Date().getHours();
-  var lines = annivLines();
+  var lines = annivLines(state.cur);
   var today = lines.some(function(l){ return l.indexOf("今天是")===0; });
   if (h>=21 && state.lastNight !== todayStr()) {
     state.lastNight = todayStr(); LS.set("lastNight", state.lastNight);
@@ -1252,7 +1345,7 @@ function buildSys(roleKey) {
   var memTxt = mem.length ? "\n【长期记忆（关于对方的真实信息）】\n- " + mem.join("\n- ") + "\n可以自然运用，但不要机械复述。" : "";
   var sum = state.summaries[roleId];
   var sumTxt = sum ? "\n【更早的对话摘要】" + sum : "";
-  var ann = annivLines();
+  var ann = annivLines(roleId);
   var annTxt = ann.length ? "\n【纪念日情境】" + ann.join("；") : "";
   var mr = state.moods.slice(-3);
   var moodTxt = mr.length ? "\n【对方近期心情打卡】" + mr.map(function(m){ return m.d + " " + (MOODS[m.m]?MOODS[m.m].t:""); }).join("，") : "";
@@ -1594,26 +1687,37 @@ document.getElementById("moodSave").onclick = function() {
   setTimeout(function(){ pushBot(care[moodNow]); }, 300);
 };
 
-/* ---------- 设置 ---------- */
-function fillSettings() {
-  var ek = state.editRole || state.cur;
-  if (!ROLES[ek]) ek = Object.keys(ROLES)[0];
-  var sel = document.getElementById("setRole");
-  sel.innerHTML = "";
-  Object.keys(ROLES).forEach(function(k){
-    var o = document.createElement("option");
-    o.value = k; o.textContent = ROLES[k].emoji + " " + ROLES[k].label;
-    sel.appendChild(o);
-  });
-  sel.value = ek;
-  var p = P(ek);
-  var t1 = document.getElementById("setCardTitle");
-  if (t1) t1.textContent = "身份设定 · " + p.botName;
-  var t2 = document.getElementById("memCardTitle");
-  if (t2) t2.textContent = p.botName + " 的记忆本 🧠";
+/* ---------- 角色主页（每个角色自己的设置） ---------- */
+function fillRolePage(k) {
+  k = k || state.cur;
+  if (!ROLES[k]) k = Object.keys(ROLES)[0];
+  var r = ROLES[k], p = P(k);
+  document.getElementById("roleAvatar").textContent = p.emoji || r.emoji;
+  document.getElementById("roleName").textContent = p.botName;
+  document.getElementById("roleSub").textContent = r.label + " · " + r.tag;
+  document.getElementById("setCardTitle").textContent = "身份设定";
+  document.getElementById("memCardTitle").textContent = p.botName + " 的记忆本 🧠";
+  document.getElementById("setEmoji").value = p.emoji || r.emoji;
   document.getElementById("setBotName").value = p.botName;
   document.getElementById("setNick").value = p.nick;
   document.getElementById("setPersona").value = p.persona;
+  document.getElementById("voiceSwitch").classList.toggle("on", !!p.voice);
+  document.getElementById("memBox").value = MEM(k).join("\n");
+  var mh = document.getElementById("memHealth");
+  mh.textContent = "已记住 " + MEM(k).length + " 条 · " + (state.summaries[k] ? "已生成早期对话摘要" : "暂无对话摘要") +
+    " · 人设卡每轮完整注入，不参与压缩。AI 模式下 TA 也会自己往里记。";
+  renderAnniv(k);
+  fillRoleStats(k);
+}
+function fillRoleStats(k) {
+  k = k || state.cur;
+  var el = document.getElementById("roleStats");
+  if (!el || !ROLES[k]) return;
+  el.textContent = "这个对话框共 " + CH(k).length + " 条消息 · 记忆 " + MEM(k).length + " 条 · 都只存在本机";
+}
+
+/* ---------- AI 模型设置（全局弹层） ---------- */
+function fillApiSheet() {
   document.getElementById("apiSwitch").classList.toggle("on", !!state.api.on);
   document.getElementById("apiUrl").value = state.api.url || "";
   /* 输入框永远不回填 Key，只提示是否已保存 */
@@ -1627,13 +1731,14 @@ function fillSettings() {
   if (remRow) remRow.style.display = HAS_VAULT ? "none" : "flex";
   document.getElementById("apiRemember").classList.toggle("on", rememberedToken);
   document.getElementById("apiModel").value = state.api.model || API_DEFAULT_MODEL;
-  document.getElementById("voiceSwitch").classList.toggle("on", !!state.voice);
-  document.getElementById("memBox").value = MEM(ek).join("\n");
+  refreshModeUI();
+}
+
+/* ---------- 数据与推送（全局弹层） ---------- */
+function fillMore() {
   document.getElementById("nightSwitch").classList.toggle("on", !!state.night.on);
   document.getElementById("nightTime").value = state.night.time || "22:30";
-  renderAnniv();
   updateStorageInfo();
-  refreshModeUI();
 }
 function updateStorageInfo() {
   var el = document.getElementById("storageInfo");
@@ -1649,25 +1754,26 @@ function updateStorageInfo() {
       (state.storeFull ? " ⚠️ 已接近上限" : "");
   }
 }
-document.getElementById("setRole").onchange = function() {
-  /* 这里只切换「要编辑哪个角色」，不会打断你正在进行的对话 */
-  state.editRole = this.value;
-  fillSettings();
-};
 document.getElementById("setSave").onclick = function() {
-  var k = state.editRole || state.cur;
+  var k = state.cur;
   var p = P(k);
+  p.emoji = document.getElementById("setEmoji").value.trim() || ROLES[k].emoji;
   p.botName = document.getElementById("setBotName").value.trim() || ROLES[k].defName;
   p.nick = document.getElementById("setNick").value.trim() || ROLES[k].call;
   p.persona = document.getElementById("setPersona").value.trim() || ROLES[k].persona;
   saveProfiles();
-  fillSettings();
+  fillRolePage(k);
   renderSessions();
-  if (k === state.cur) applyIdentity();
-  alert("已保存「" + p.botName + "」的身份设定 ✅");
+  applyIdentity();
+  alert("已保存「" + p.botName + "」的设定 ✅");
 };
 document.getElementById("apiSwitch").onclick = function(){ this.classList.toggle("on"); };
-document.getElementById("voiceSwitch").onclick = function(){ this.classList.toggle("on"); };
+document.getElementById("voiceSwitch").onclick = function(){
+  this.classList.toggle("on");
+  var p = P();
+  p.voice = this.classList.contains("on");
+  saveProfiles();
+};
 document.getElementById("apiSave").onclick = function() {
   var typed = document.getElementById("apiKey").value.trim();
   var key = state.api.key || "";
@@ -1687,8 +1793,7 @@ document.getElementById("apiSave").onclick = function() {
     key: key,
     model: document.getElementById("apiModel").value.trim() || API_DEFAULT_MODEL
   };
-  state.voice = document.getElementById("voiceSwitch").classList.contains("on");
-  persistApi(); LS.set("voice", state.voice);
+  persistApi();
   /* 浏览器版可选记住「自建代理的访问令牌」（百炼原始 Key 永不落盘） */
   var remSw = document.getElementById("apiRemember");
   var isProxyToken = /\/api$/.test(state.api.url) && key;
@@ -1701,7 +1806,7 @@ document.getElementById("apiSave").onclick = function() {
   }
   /* 配置变了，之前的检测结论就作废，避免显示"已连通"但其实换了地址 */
   clearStatus();
-  fillSettings();
+  fillApiSheet();
   var m = modeInfo();
   alert("已保存 ✅\n模型：" + state.api.model + "\n当前模式：" + m.chip +
     (!HAS_VAULT && remSw && remSw.classList.contains("on")
@@ -1717,7 +1822,7 @@ document.getElementById("apiKeyClear").onclick = function() {
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   LS.del("token_saved"); rememberedToken = false;
   state.api.key = "";
-  persistApi(); clearStatus(); fillSettings();
+  persistApi(); clearStatus(); fillApiSheet();
   alert("已清除 Key");
 };
 document.getElementById("btnTrim").onclick = function() {
@@ -1734,17 +1839,31 @@ document.getElementById("btnTrim").onclick = function() {
   alert("已清理");
 };
 document.getElementById("memSave").onclick = function() {
-  var k = state.editRole || state.cur;
+  var k = state.cur;
   var lines = document.getElementById("memBox").value.split("\n").map(function(s){ return s.trim(); }).filter(function(s){ return s; });
   state.mems[k] = lines.slice(0, 60);
   saveMems();
+  fillRolePage(k);
   alert("「" + P(k).botName + "」的记忆本已保存 ✅");
 };
-function renderAnniv() {
+/* 防漂移锚定：清掉压缩摘要，下次对话从原文重算，人设卡全量重注入 */
+document.getElementById("btnReanchor").onclick = function() {
+  var k = state.cur, p = P(k);
+  if (!confirm("重新锚定「" + p.botName + "」的人设？\n\n会清掉旧的对话摘要（下次对话从原文重算），人设卡本来每轮都会完整注入。感觉 TA 说话越来越不像 TA 的时候用这个。")) return;
+  delete state.summaries[k];
+  delete state.summaryDone[k];
+  LS.set("summaries", state.summaries);
+  LS.set("summaryDone", state.summaryDone);
+  fillRolePage(k);
+  alert("已重新锚定 ✅ 从下一句话开始，TA 会回到设定里的样子。");
+};
+function renderAnniv(k) {
+  k = k || state.cur;
   var list = document.getElementById("annivList");
   list.innerHTML = "";
-  if (!state.anniv.length) { list.innerHTML = '<div class="empty-tip" style="padding:10px 0">还没有纪念日</div>'; return; }
-  state.anniv.forEach(function(a, i){
+  var arr = annivOf(k);
+  if (!arr.length) { list.innerHTML = '<div class="empty-tip" style="padding:10px 0">这个角色还没有纪念日</div>'; return; }
+  arr.forEach(function(a, i){
     var d = document.createElement("div");
     d.className = "list-item";
     var du = daysUntil(a.date);
@@ -1752,7 +1871,7 @@ function renderAnniv() {
     d.querySelector(".li-title").textContent = a.name;
     d.querySelector(".li-sub").textContent = a.date + " · " + (du === 0 ? "就是今天！🎉" : "还有 " + du + " 天");
     d.querySelector(".li-del").onclick = function(){
-      state.anniv.splice(i,1); LS.set("anniv", state.anniv); renderAnniv();
+      arr.splice(i,1); saveAnnivs(); renderAnniv(k);
     };
     list.appendChild(d);
   });
@@ -1761,10 +1880,11 @@ document.getElementById("annivAdd").onclick = function() {
   var n = document.getElementById("annivName").value.trim();
   var dt = document.getElementById("annivDate").value;
   if (!n || !dt) { alert("名称和日期都要填哦～"); return; }
-  state.anniv.push({ name:n, date:dt });
-  LS.set("anniv", state.anniv);
+  annivOf(state.cur).push({ name:n, date:dt });
+  saveAnnivs();
   document.getElementById("annivName").value = "";
-  renderAnniv();
+  document.getElementById("annivDate").value = "";
+  renderAnniv(state.cur);
 };
 document.getElementById("nightSwitch").onclick = function(){ this.classList.toggle("on"); };
 document.getElementById("nightSave").onclick = function() {
@@ -1790,7 +1910,7 @@ function exportData() {
   var data = {
     v: "1.6", at: Date.now(),
     cur: state.cur, profiles: state.profiles, chats: state.chats, mems: state.mems,
-    summaries: state.summaries, summaryDone: state.summaryDone, moods: state.moods, anniv: state.anniv,
+    summaries: state.summaries, summaryDone: state.summaryDone, moods: state.moods, annivs: state.annivs,
     active: state.active, lastMsg: state.lastMsg,
     /* 只导出接口地址与模型名，不导出 API Key（安全考虑） */
     api: { on: state.api.on, url: state.api.url, model: state.api.model },
@@ -1948,7 +2068,12 @@ function applyBackup(d) {
   state.summaries = d.summaries || {};
   state.summaryDone = d.summaryDone || {};
   state.moods = d.moods || [];
-  state.anniv = d.anniv || [];
+  state.annivs = d.annivs || {};
+  /* 老备份里的 anniv 是全局一份，迁到导出时的当前角色名下 */
+  if (Array.isArray(d.anniv) && d.anniv.length) {
+    var tk = (d.cur && ROLES[d.cur]) ? d.cur : "guimi";
+    state.annivs[tk] = d.anniv;
+  }
   /* 丢弃一天前已过期的提醒，保留未到期的 */
   state.reminders = (d.reminders || []).filter(function(r){ return r && r.id && r.ts && r.ts > now - 86400000; });
   if (d.night) state.night = { on: !!d.night.on, time: d.night.time || "22:30" };
@@ -1973,7 +2098,7 @@ function applyBackup(d) {
 
   LS.set("profiles", state.profiles); LS.set("memories", state.mems);
   LS.set("summaries", state.summaries); LS.set("summaryDone", state.summaryDone);
-  LS.set("moods", state.moods); LS.set("anniv", state.anniv);
+  LS.set("moods", state.moods); LS.set("annivs", state.annivs);
   LS.set("reminders", state.reminders); LS.set("cur", state.cur);
   LS.set("night", state.night);
   persistApi();
@@ -2056,13 +2181,33 @@ document.getElementById("btnClearChat").onclick = function() {
   var p = P();
   if (!confirm("清空和「" + p.botName + "」的聊天记录？（记忆本不受影响）")) return;
   state.chats[state.cur] = []; saveChats();
+  if (NATIVE_CHAT) nativeReplaceRole(state.cur);
   delete state.lastMsg[state.cur]; LS.set("lastMsg", state.lastMsg);
   state.unread[state.cur] = 0; LS.set("unread", state.unread);
   renderMsgs(); renderSessions();
+  fillRoleStats();
+};
+/* 导出单个角色的聊天记录（纯文本，可复制保存） */
+document.getElementById("btnExportChat").onclick = function() {
+  var k = state.cur, p = P(k);
+  nativeLoadRole(k);
+  var arr = CH(k);
+  if (!arr.length) { alert("这个对话框还没有聊天记录"); return; }
+  var lines = arr.map(function(m){
+    return "[" + new Date(m.ts).toLocaleString("zh-CN") + "] " + (m.role === "user" ? "我" : p.botName) + "：" + m.text;
+  });
+  openModal("「" + p.botName + "」的聊天记录（" + arr.length + " 条）", lines.join("\n\n"), true);
+};
+document.getElementById("btnRemoveRole").onclick = function() {
+  var k = state.cur, p = P(k);
+  if (!confirm("把「" + p.botName + "」从消息列表移除？\n\n聊天记录和记忆都会保留，以后在「＋」里可以随时加回来。")) return;
+  state.active = state.active.filter(function(x){ return x !== k; });
+  LS.set("active", state.active);
+  backHome();
 };
 document.getElementById("btnReset").onclick = function() {
   if (!confirm("重置全部数据？聊天、记忆、心情、提醒、身份都会被删除。")) return;
-  ["cur","profiles","chats","memories","summaries","summaryDone","moods","anniv","api","night","lastNight","reminders","voice","active","lastMsg","unread","token_saved","apiStatus"].forEach(function(k){ LS.del(k); });
+  ["cur","profiles","chats","memories","summaries","summaryDone","moods","anniv","annivs","api","night","lastNight","reminders","voice","active","lastMsg","unread","token_saved","apiStatus"].forEach(function(k){ LS.del(k); });
   if (HAS_VAULT) { try { window.AndroidBridge.clearApiKey(); } catch(e) {} }
   else { try { sessionStorage.removeItem("nuanyu_key"); } catch(e) {} }
   if (NATIVE_CHAT) { try { window.AndroidBridge.clearAllChats(); } catch(e) {} }
@@ -2128,7 +2273,7 @@ function renderSessions() {
 
     var av = document.createElement("div");
     av.className = "s-av";
-    av.textContent = r.emoji;
+    av.textContent = p.emoji || r.emoji;
     var un = state.unread[k] || 0;
     if (un > 0) {
       var badge = document.createElement("span");
@@ -2190,7 +2335,6 @@ function openChat(k) {
   if (!ROLES[k]) return;
   ensureActive(k);
   state.cur = k;
-  state.editRole = k;
   LS.set("cur", k);
   nativeLoadRole(k);
   P(k);
@@ -2199,7 +2343,6 @@ function openChat(k) {
 
   applyIdentity();
   renderMsgs();
-  fillSettings();
 
   document.getElementById("page-home").classList.remove("show");
   document.getElementById("page-chat").classList.add("show");
@@ -2237,6 +2380,7 @@ function doBackHomeUI() {
   chatOpen = false;
   try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
   document.getElementById("page-chat").classList.remove("show");
+  document.getElementById("page-role").classList.remove("show");
   document.getElementById("app").classList.remove("in-chat");
   Array.prototype.forEach.call(document.querySelectorAll(".page"), function(p){ p.classList.remove("show"); });
   document.getElementById("page-home").classList.add("show");
@@ -2266,7 +2410,7 @@ function openRoleSheet() {
     var b = document.createElement("button");
     b.className = "rs-item" + (k === state.cur ? " cur" : "");
     var em = document.createElement("span");
-    em.className = "ri-emoji"; em.textContent = r.emoji;
+    em.className = "ri-emoji"; em.textContent = p.emoji || r.emoji;
     var wrap = document.createElement("span");
     var nm = document.createElement("span");
     nm.className = "ri-name"; nm.textContent = p.botName;
@@ -2283,16 +2427,48 @@ function openRoleSheet() {
 document.getElementById("btnAddRole").onclick = openRoleSheet;
 document.getElementById("headAvatar").onclick = openRoleSheet;
 document.getElementById("chatBack").onclick = backHome;
-document.getElementById("modeChip").onclick = goCheckAI;
-document.getElementById("headStatus").onclick = goCheckAI;
+document.getElementById("modeChip").onclick = openApiSheet;
+document.getElementById("headStatus").onclick = openApiSheet;
 document.getElementById("rsClose").onclick = function(){ document.getElementById("roleSheet").classList.remove("show"); };
 document.getElementById("roleSheet").onclick = function(e){ if (e.target === this) this.classList.remove("show"); };
+
+/* ---------- 角色主页（从聊天框右上角进入） ---------- */
+function openRolePage() {
+  var k = state.cur;
+  if (!ROLES[k]) return;
+  fillRolePage(k);
+  document.getElementById("page-chat").classList.remove("show");
+  document.getElementById("page-role").classList.add("show");
+}
+function closeRolePage() {
+  document.getElementById("page-role").classList.remove("show");
+  document.getElementById("page-chat").classList.add("show");
+  fillRoleStats();
+}
+document.getElementById("chatProfile").onclick = openRolePage;
+document.getElementById("roleBack").onclick = closeRolePage;
+document.getElementById("btnGoApi").onclick = openApiSheet;
+document.getElementById("btnGoMore").onclick = openMoreSheet;
+document.getElementById("btnMore").onclick = openMoreSheet;
+document.getElementById("apiClose").onclick = function(){ document.getElementById("apiSheet").classList.remove("show"); };
+document.getElementById("apiSheet").onclick = function(e){ if (e.target === this) this.classList.remove("show"); };
+document.getElementById("moreClose").onclick = function(){ document.getElementById("moreSheet").classList.remove("show"); };
+document.getElementById("moreSheet").onclick = function(e){ if (e.target === this) this.classList.remove("show"); };
+function openApiSheet() {
+  fillApiSheet();
+  document.getElementById("apiSheet").classList.add("show");
+}
+function openMoreSheet() {
+  fillMore();
+  document.getElementById("moreSheet").classList.add("show");
+}
 
 /* ---------- 标签页 ---------- */
 function gotoTab(tab) {
   chatOpen = false;
   try { if (window.AndroidBridge && window.AndroidBridge.setChatOpen) window.AndroidBridge.setChatOpen(false); } catch(e) {}
   document.getElementById("page-chat").classList.remove("show");
+  document.getElementById("page-role").classList.remove("show");
   document.getElementById("app").classList.remove("in-chat");
   Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(x){
     x.classList.toggle("on", x.dataset.tab === tab);
@@ -2302,19 +2478,10 @@ function gotoTab(tab) {
   if (tab === "page-home") renderSessions();
   if (tab === "page-mood") renderMood();
   if (tab === "page-remind") renderReminders();
-  if (tab === "page-set") fillSettings();
 }
 Array.prototype.forEach.call(document.querySelectorAll(".tabbar button"), function(b){
   b.onclick = function(){ gotoTab(b.dataset.tab); };
 });
-/* 顶部状态点一下 -> 去设置页看详情 / 测试连接 */
-function goCheckAI() {
-  gotoTab("page-set");
-  setTimeout(function(){
-    var card = document.getElementById("apiModeLine");
-    if (card && card.scrollIntoView) card.scrollIntoView({ behavior:"smooth", block:"center" });
-  }, 60);
-}
 
 /* ---------- 启动 ---------- */
 renderOnboarding();
