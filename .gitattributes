@@ -1,0 +1,14 @@
+# 统一换行符，避免跨平台 diff 噪音
+* text=auto eol=lf
+
+# 二进制
+*.png binary
+*.jpg binary
+*.apk binary
+*.keystore binary
+*.jks binary
+*.dex binary
+
+# 文档与脚本：GitHub 上按对应语言渲染
+*.md text
+*.sh text eol=lf

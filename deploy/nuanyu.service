@@ -1,0 +1,23 @@
+[Unit]
+Description=Nuanyu companion cloud proxy
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/nuanyu
+# 百炼 Key 与客户端访问令牌都只存在服务器环境变量里
+Environment="DASHSCOPE_API_KEY=sk-在此填入你的百炼Key"
+Environment="NUANYU_TOKEN=在此填入客户端访问令牌"
+Environment="DASHSCOPE_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1"
+Environment="RATE_PER_MIN=20"
+Environment="RATE_PER_DAY=800"
+ExecStart=/opt/nuanyu/venv/bin/gunicorn -w 2 --threads 8 -b 127.0.0.1:8000 app:app
+Restart=always
+RestartSec=3
+StandardOutput=append:/var/log/nuanyu.log
+StandardError=append:/var/log/nuanyu.err.log
+
+[Install]
+WantedBy=multi-user.target

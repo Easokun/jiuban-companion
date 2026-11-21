@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#ffeef2">
-<title>暖语 · 情感陪伴</title>
+<title>久伴 · 情感陪伴</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { height:100%; }
@@ -274,7 +274,7 @@
 
 <!-- 引导页 -->
 <div id="onboarding">
-  <h1>暖语</h1>
+  <h1>久伴</h1>
   <div class="sub">你的专属情感陪伴智能体 · 离线可用 · 数据只存手机</div>
   <div class="role-grid" id="roleGrid"></div>
   <div class="ob-field">
@@ -478,9 +478,9 @@
       <button class="btn-plain" id="nightSave">保存晚安设置</button>
       <div class="set-row" style="margin-top:8px"><button class="btn-plain" id="btnTestNotify">🔔 发一条测试通知（验证推送是否真的能用）</button></div>
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:8px">
-        如果测试通知收不到，依次检查：① 系统设置 → 应用 → 暖语 → 通知 → 允许通知；
-        ② 鸿蒙/华为：应用启动管理 → 暖语 → 关掉「自动管理」，手动允许「自启动 / 关联启动 / 后台活动」（这步不做，锁屏后闹钟会被系统拦掉）；
-        ③ 电池设置里取消对暖语的省电限制。
+        如果测试通知收不到，依次检查：① 系统设置 → 应用 → 久伴 → 通知 → 允许通知；
+        ② 鸿蒙/华为：应用启动管理 → 久伴 → 关掉「自动管理」，手动允许「自启动 / 关联启动 / 后台活动」（这步不做，锁屏后闹钟会被系统拦掉）；
+        ③ 电池设置里取消对久伴的省电限制。
       </div>
     </div>
 
@@ -496,7 +496,7 @@
       <div style="font-size:11px;color:#b59aa5;line-height:1.7;margin-top:6px">备份文件用密码加密（AES-GCM）后再保存，密码丢了备份就解不开，务必记牢。</div>
     </div>
 
-    <div class="ver-tip">暖语 v1.9 · 多角色情感陪伴智能体<br>角色主页 · 防漂移锚定 · 独立记忆 · 加密备份</div>
+    <div class="ver-tip">久伴 v1.10 · 多角色情感陪伴智能体<br>角色主页 · 防漂移锚定 · 独立记忆 · 加密备份</div>
     <button class="btn-plain rs-close" id="moreClose">关闭</button>
   </div>
 </div>
@@ -533,7 +533,7 @@
 <script>
 "use strict";
 /* =====================================================================
- * 暖语 v1.2 · 多角色情感陪伴智能体
+ * 久伴 v1.10 · 多角色情感陪伴智能体
  * 纯前端 · 离线优先 · 8 角色 · 记忆分层 · 工具调用 · 语音播报
  * ===================================================================== */
 
@@ -1182,7 +1182,7 @@ function applyIdentity() {
   document.getElementById("headAvatar").textContent = p.emoji || r.emoji;
   document.getElementById("headName").textContent = p.botName;
   refreshModeUI();
-  document.title = p.botName + " · 暖语";
+  document.title = p.botName + " · 久伴";
 }
 function openGreeting() {
   var h = new Date().getHours();
@@ -1613,7 +1613,7 @@ function addReminder(title, ts, fromTool, roleKey) {
   LS.set("reminders", state.reminders);
   renderReminders();
   if (window.AndroidBridge && window.AndroidBridge.scheduleReminder) {
-    try { window.AndroidBridge.scheduleReminder(id, "暖语提醒", title, String(ts)); } catch(e) {}
+    try { window.AndroidBridge.scheduleReminder(id, "久伴提醒", title, String(ts)); } catch(e) {}
   }
   if (!fromTool) pushBot("好的，我记下了：「" + title + "」，" + new Date(ts).toLocaleString("zh-CN") + " 我会提醒你 ⏰", roleId);
 }
@@ -1915,13 +1915,13 @@ document.getElementById("btnTestNotify").onclick = function() {
   var perm = true;
   try { perm = window.AndroidBridge.notificationsEnabled(); } catch(e) {}
   if (!perm) {
-    alert("通知权限被关了 🚫\n去 系统设置 → 应用 → 暖语 → 通知 → 允许通知，然后再测一次。");
+    alert("通知权限被关了 🚫\n去 系统设置 → 应用 → 久伴 → 通知 → 允许通知，然后再测一次。");
     return;
   }
   var ok = false;
   try { ok = window.AndroidBridge.testNotify(); } catch(e) { ok = false; }
   if (ok) {
-    alert("测试通知已发出 🔔\n\n几秒内下拉通知栏看「暖语 · 测试通知」。收到了说明通道正常，晚上到点会准时响。\n\n没收到的话按上面卡片里的三步检查（通知权限 / 应用启动管理 / 电池限制），其中鸿蒙的「应用启动管理」最关键。");
+    alert("测试通知已发出 🔔\n\n几秒内下拉通知栏看「久伴 · 测试通知」。收到了说明通道正常，晚上到点会准时响。\n\n没收到的话按上面卡片里的三步检查（通知权限 / 应用启动管理 / 电池限制），其中鸿蒙的「应用启动管理」最关键。");
   } else {
     alert("发送失败，请重启 App 再试一次。");
   }
@@ -2034,7 +2034,7 @@ document.getElementById("btnBackup").onclick = function() {
   askPassword("export").then(function(pw){
     if (!pw) return;
     return encryptBackup(exportData(), pw).then(function(encrypted){
-      var name = "暖语备份-" + stampNow() + ".nydb";
+      var name = "久伴备份-" + stampNow() + ".nydb";
       var saved = "";
       if (window.AndroidBridge && window.AndroidBridge.saveBackup) {
         try { saved = window.AndroidBridge.saveBackup(name, encrypted) || ""; } catch(e) { saved = ""; }
@@ -2157,7 +2157,7 @@ function syncNative() {
   if (window.AndroidBridge.scheduleReminder) {
     (state.reminders || []).forEach(function(r){
       if (r && r.id && r.ts > now) {
-        try { window.AndroidBridge.scheduleReminder(r.id, "暖语提醒", r.title, String(r.ts)); } catch(e) {}
+        try { window.AndroidBridge.scheduleReminder(r.id, "久伴提醒", r.title, String(r.ts)); } catch(e) {}
       }
     });
   }
