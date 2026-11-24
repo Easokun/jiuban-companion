@@ -154,6 +154,7 @@
   .typing { display:flex; gap:5px; padding:14px 16px; }
   .typing i { width:7px; height:7px; border-radius:50%; background:#e8a0b5; animation:blink 1.2s infinite; }
   .typing i:nth-child(2){ animation-delay:.2s } .typing i:nth-child(3){ animation-delay:.4s }
+  .typing .t-sec { font-size:10px; color:#b59aa5; margin-left:8px; line-height:14px; font-variant-numeric:tabular-nums; }
   @keyframes blink { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
   .input-bar {
     display:flex; align-items:flex-end; gap:8px; padding:9px 12px calc(9px + env(safe-area-inset-bottom));
@@ -1273,14 +1274,25 @@ function pushBot(text, role, src) {
   }
   return text;
 }
+var typingTimer = null, typingT0 = 0;
 function showTyping() {
+  hideTyping();
   var box = document.getElementById("msgs");
   var d = document.createElement("div");
   d.className = "msg bot typing"; d.id = "typing";
-  d.innerHTML = "<i></i><i></i><i></i>";
+  d.innerHTML = "<i></i><i></i><i></i><span class=\"t-sec\"></span>";
   box.appendChild(d); box.scrollTop = box.scrollHeight;
+  /* 等待计时：超过 5 秒开始显示秒数，让"她还在想"可以被感知 */
+  typingT0 = Date.now();
+  typingTimer = setInterval(function(){
+    var s = document.querySelector("#typing .t-sec");
+    if (s) {
+      var sec = Math.round((Date.now() - typingT0) / 1000);
+      s.textContent = sec >= 5 ? sec + "s" : "";
+    }
+  }, 1000);
 }
-function hideTyping() { var t = document.getElementById("typing"); if (t) t.remove(); }
+function hideTyping() { if (typingTimer) { clearInterval(typingTimer); typingTimer = null; } var t = document.getElementById("typing"); if (t) t.remove(); }
 
 /* ---------- 情绪与离线回复 ---------- */
 function detectEmotion(text) {
@@ -1421,6 +1433,22 @@ var TOOLS = [
 function headers() {
   return { "Content-Type":"application/json", "Authorization":"Bearer " + state.api.key };
 }
+/* qwen3 系列默认开思考模式（先思考再回答，首字延迟翻倍）——显式关掉 */
+function reqBody(extra) {
+  var b = extra || {};
+  if (/qwen3/i.test(modelName())) b.enable_thinking = false;
+  return b;
+}
+/* 带超时的 fetch：网络挂死时及时失败并回退，不再永远转圈 */
+function fetchT(url, opts, ms) {
+  if (typeof AbortController === "undefined") return fetch(url, opts);
+  var ctl = new AbortController();
+  var timer = setTimeout(function(){ ctl.abort(); }, ms || 60000);
+  return fetch(url, Object.assign({}, opts, { signal: ctl.signal })).then(
+    function(r){ clearTimeout(timer); return r; },
+    function(e){ clearTimeout(timer); throw (e && /abort/i.test(e.name || "")) ? new Error("__timeout") : e; }
+  );
+}
 function historyFor(roleKey) {
   var roleId = roleKey || state.cur;
   return CH(roleId).slice(-12).map(function(m){ return { role: m.role==="user" ? "user" : "assistant", content: m.text }; });
@@ -1428,11 +1456,11 @@ function historyFor(roleKey) {
 
 /* 流式对话 */
 function streamChat(messages, onDelta) {
-  return fetch(apiBase() + "/chat/completions", {
+  return fetchT(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
-    body: JSON.stringify({ model: modelName(), messages: messages,
-      temperature: 0.95, presence_penalty: 0.5, frequency_penalty: 0.4, stream: true })
-  }).then(function(res){
+    body: JSON.stringify(reqBody({ model: modelName(), messages: messages,
+      temperature: 0.95, presence_penalty: 0.5, frequency_penalty: 0.4, stream: true }))
+  }, 60000).then(function(res){
     if (!res.ok) throw new Error("HTTP " + res.status);
     if (!res.body) throw new Error("no-stream");
     var reader = res.body.getReader(), dec = new TextDecoder(), buf = "", full = "";
@@ -1464,11 +1492,11 @@ function streamChat(messages, onDelta) {
 
 /* 工具调用（非流式） */
 function toolChat(messages) {
-  return fetch(apiBase() + "/chat/completions", {
+  return fetchT(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
-    body: JSON.stringify({ model: modelName(), messages: messages,
-      temperature: 0.9, presence_penalty: 0.5, frequency_penalty: 0.4, tools: TOOLS, tool_choice: "auto" })
-  }).then(function(res){
+    body: JSON.stringify(reqBody({ model: modelName(), messages: messages,
+      temperature: 0.9, presence_penalty: 0.5, frequency_penalty: 0.4, tools: TOOLS, tool_choice: "auto" }))
+  }, 60000).then(function(res){
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }).then(function(j){
@@ -1540,9 +1568,9 @@ function maybeSummarize(roleKey) {
   var oldText = slice.map(function(m){ return (m.role==="user"?"对方：":"我：") + m.text; }).join("\n");
   fetch(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
-    body: JSON.stringify({ model: modelName(), temperature:0.2,
+    body: JSON.stringify(reqBody({ model: modelName(), temperature:0.2,
       messages:[{ role:"system", content:"把下面的对话压缩成一段第三人称摘要，100字以内，只保留关于对方的重要事实和情绪状态。" },
-                { role:"user", content: oldText }] })
+                { role:"user", content: oldText }] }))
   }).then(function(r){ return r.json(); }).then(function(j){
     var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
     if (!c) return;
@@ -1604,9 +1632,14 @@ function send() {
   }
 
   if (state.api.on && state.api.key) {
-    var isToolIntent = /(提醒我|帮我记|记住|别忘|日程|定时|叫我)/.test(text);
+    /* 只把真正要"设定动作"的话走慢通道（工具调用）；"记住/别忘"这类话本地抽取就能处理，误命中会白白慢一倍 */
+    var isToolIntent = /(提醒我|帮我记一下|定个|设置提醒|叫我起床|叫我.*点)/.test(text);
     if (isToolIntent) {
-      agentReply(text, role).then(function(r){ finish(r, "ai"); }).catch(function(){ markStatus(false, "接口请求失败，已回退离线话术"); finish(offlineReply(text, role), "off"); });
+      agentReply(text, role).then(function(r){ finish(r, "ai"); }).catch(function(e){
+        var slow = e && /__timeout|timeout/i.test(e.message || "");
+        markStatus(false, slow ? "连接超时（60 秒无响应，检查网络后重试）" : "接口请求失败，已回退离线话术");
+        finish(offlineReply(text, role), "off");
+      });
     } else {
       var bubble = null;
       var msgs = [{ role:"system", content: buildSys(role) }].concat(historyFor(role));
@@ -1625,10 +1658,11 @@ function send() {
       }).then(function(full){
         if (bubble) bubble.remove();
         finish(full, "ai");
-      }).catch(function(){
+      }).catch(function(e){
         if (bubble) bubble.remove();
-        markStatus(false, "接口请求失败，已回退离线话术");
-        finish("（网络有点小状况，我先用老方式陪你聊～\n" + offlineReply(text, role) + "）", "off");
+        var slow = e && /__timeout|timeout/i.test(e.message || "");
+        markStatus(false, slow ? "连接超时（60 秒无响应，检查网络后重试）" : "接口请求失败，已回退离线话术");
+        finish("（" + (slow ? "等了好久都没等到回复，是不是断网啦？我先说两句～" : "网络有点小状况，我先用老方式陪你聊～") + "\n" + offlineReply(text, role) + "）", "off");
       });
     }
   } else {

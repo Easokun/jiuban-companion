@@ -44,6 +44,7 @@ APKS = {
     "v1.10": "Jiuban-v1.10.apk",
     "v1.11": "Jiuban-v1.11.apk",
     "v1.12": "Jiuban-v1.12.apk",
+    "v1.12.1": "Jiuban-v1.12.1.apk",
 }
 
 TITLES = {
@@ -63,6 +64,7 @@ TITLES = {
     "v1.10": "v1.10 更名久伴",
     "v1.11": "v1.11 反 AI 味改造",
     "v1.12": "v1.12 全新图标",
+    "v1.12.1": "v1.12.1 响应速度修复",
 }
 
 TOKEN = os.environ.get("GH_TOKEN", "").strip()
