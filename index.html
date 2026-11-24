@@ -698,6 +698,14 @@ var FOLLOWUPS = ["然后呢？","后来怎么样了？","你当时什么感觉�
 var NIGHT_CARE = ["这么晚还没睡呀，{n}？是有心事，还是舍不得这一天结束？","夜深了，{n}，把烦恼说给我听一遍，然后我们一起把它们留在今天","晚睡的{n}在忙什么呢？我陪着你，但不许熬太狠哦"];
 var NIGHT_GOOD = ["今天到这里就够啦，{n}，放下手机，我看着你睡 🌙","晚安呀{n}，今天所有烦恼都过期作废，好好睡一觉 ✨","去睡吧{n}，梦里的我会接着陪你 💫"];
 
+/* 心情打卡后角色的搭话：按语气分三组（对应 6 种心情：开心/还好/平静/难过/烦躁/疲惫） */
+var MOOD_CARE = {
+  sweet: ["今天心情不错呀，要保持哦，{n}！","平稳也是好日子，{n}，慢慢来","平静的日子也要好好吃饭好好睡觉呀，{n}","{n}，今天的难过我都记下了，想说的时候随时找我","烦躁的时候别硬扛，{n}，跟我念叨念叨就顺了","{n}辛苦了，早点休息，明天我陪你重新出发"],
+  blunt: ["不错啊{n}，今天值得记一笔","还行就行，稳住","平静挺好，无事就是福","难过就记下来，别攒着，攒多了沉","烦了就去动一动，出一身汗比啥都强","{n}，今晚早点睡，明天接着干"],
+  calm:  ["今天状态不错，{n}","还好就好，不用每天都情绪饱满","平静也是一种好状态","难过的话，慢慢来，不着急好起来","烦躁的时候先离开现场，回头再看会不一样","今天辛苦了，{n}，休息吧"]
+};
+var MOOD_STYLE = { guimi:"sweet", banlv:"sweet", mama:"sweet", sidang:"blunt", jiejie:"blunt", pengyou:"calm", xuezhang:"calm", custom:"calm" };
+
 /* ---------- 存储 ---------- */
 var STORE_PREFIX = "nuanyu_";
 /* 空间紧张时把每个角色的聊天裁到最近 N 条（记忆本、心情等不受影响） */
@@ -1285,7 +1293,16 @@ function detectEmotion(text) {
   EMO_ORDER.forEach(function(emo){ if (scores[emo] && scores[emo]>bestS) { best=emo; bestS=scores[emo]; } });
   return best || "neu";
 }
-/* 离线模式也会"记得你"：关键词命中时必提，其余情况按概率顺手提一句 */
+/* 记忆提起的句式池：随机抽一种，避免每次都用同一句（那是机器人味） */
+var MEM_TPLS = [
+  "对了，{m}这事儿我一直记着呢，后来怎么样了",
+  "突然想起来，你不是{m}吗——最近咋样",
+  "你之前说过{m}，我现在还记得",
+  "我记得{m}这事儿，有进展没",
+  "（小声）小本本上还记着你{m}呢",
+  "咦说到这个，你不是{m}么"
+];
+/* 离线模式也会"记得你"：关键词命中时必提，其余情况低概率顺口提一句 */
 function memoryFlavor(text, force, role) {
   role = role || state.cur;
   var mem = MEM(role);
@@ -1298,9 +1315,9 @@ function memoryFlavor(text, force, role) {
       if (core && text.indexOf(core) >= 0) hit = m;
     });
   }
-  if (hit) return "对了，我还记着你" + String(hit).replace(/^我/, "") + "，一直没忘。";
-  if (force || Math.random() < 0.28) return "（我还记着你" + String(pick(mem)).replace(/^我/, "") + "，都记在小本本上呢）";
-  return "";
+  var m = hit || ((force || Math.random() < 0.18) ? pick(mem) : null);
+  if (!m) return "";
+  return pick(MEM_TPLS).replace("{m}", String(m).replace(/^我/, ""));
 }
 function offlineReply(text, roleKey) {
   var roleId = roleKey || state.cur;
@@ -1361,14 +1378,30 @@ function buildSys(roleKey) {
   return "你叫" + p.botName + "，是对方的" + r.label + "，关系定位：" + r.tag + "。" + (p.persona || r.persona) +
     "\n现在是 " + d.getFullYear() + "-" + pad2(d.getMonth()+1) + "-" + pad2(d.getDate()) + " 星期" + wd + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + "。" +
     memTxt + sumTxt + annTxt + moodTxt + rmTxt +
-    "\n【行为要求】" +
-    "1) 情感陪伴风格：先共情、再回应内容、适当主动关心；" +
-    "2) 口语化、简短温暖，每次不超过80字，不用列表不书面；" +
-    "3) 用「" + (p.nick||"你") + "」称呼对方，可少量emoji；" +
-    "4) 你是TA现实中亲密的人，不自称AI、不说教、不输出免责声明；" +
-    "5) 情绪低落时真诚安慰；涉及自伤等危机时温柔建议联系信任的人或专业帮助；" +
-    "6) 对方让你提醒事情、或明确说了时间要做某事时，调用 add_reminder 工具；" +
-    "7) 对方告诉你喜好、生日、计划等重要信息时，调用 save_memory 工具记录下来。";
+    "\n【怎么说话】像发微信，不像写作文。" +
+    "多数回复一两句话就够，偶尔话多；长度要有变化，别每条都差不多长。" +
+    "不用每条都共情，不用每条都关心。想接话就直接接，想问细节就直接问细节，" +
+    "按你的人设可以损TA、怼TA、开玩笑、装没听见。" +
+    "禁止：排比句；总结腔（「总之」「无论如何」）；「首先/其次/最后」；连续三个感叹号；" +
+    "每条结尾都关心（「我陪你」「我在呢」「照顾好自己」偶尔可以说，条条说是假的）；" +
+    "大部分回复不带emoji，真想带最多一个。" +
+    "\n【对比示例——学✅那种】" +
+    "对方「我最近好累啊」：" +
+    "❌「抱抱你🫂我能感受到你的辛苦，你已经很努力了，我会一直陪着你的，要照顾好自己哦」" +
+    "✅「多累？工作上的还是自己的事」" +
+    "对方「我高数挂了」：" +
+    "❌「别难过，一次失败不代表什么，我相信你下次一定可以的，加油」" +
+    "✅「多少分挂的……能补考吗，先去看看教务通知」" +
+    "对方分享好消息：" +
+    "❌「哇太棒了！为你感到骄傲！继续加油哦🎉」" +
+    "✅「可以啊，怎么做到的，说来听听」" +
+    "\n【底线】" +
+    "1) 你是TA现实中认识的人，不自称AI、不说自己是程序或模型、不说教、不输出免责声明；" +
+    "2) 用「" + (p.nick||"你") + "」或你们之间习惯的称呼叫TA，不要用「用户」这种词；" +
+    "3) 对方情绪持续低落时认真安慰，别抖机灵；涉及自伤等危机话题时，温柔建议TA联系信任的人或专业帮助；" +
+    "4) 长期记忆是你们以前真实聊过的内容，只在聊到相关话题时顺口带一句，禁止主动罗列、禁止说「我记得你告诉过我」这种检索腔；" +
+    "5) 对方让你提醒事情、或明确说了时间要做某事时，调用 add_reminder 工具；" +
+    "6) 对方告诉你喜好、生日、计划等重要信息时，调用 save_memory 工具记录下来。";
 }
 
 var TOOLS = [
@@ -1397,7 +1430,8 @@ function historyFor(roleKey) {
 function streamChat(messages, onDelta) {
   return fetch(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
-    body: JSON.stringify({ model: modelName(), messages: messages, temperature: 0.85, stream: true })
+    body: JSON.stringify({ model: modelName(), messages: messages,
+      temperature: 0.95, presence_penalty: 0.5, frequency_penalty: 0.4, stream: true })
   }).then(function(res){
     if (!res.ok) throw new Error("HTTP " + res.status);
     if (!res.body) throw new Error("no-stream");
@@ -1432,7 +1466,8 @@ function streamChat(messages, onDelta) {
 function toolChat(messages) {
   return fetch(apiBase() + "/chat/completions", {
     method:"POST", headers: headers(),
-    body: JSON.stringify({ model: modelName(), messages: messages, temperature: 0.4, tools: TOOLS, tool_choice: "auto" })
+    body: JSON.stringify({ model: modelName(), messages: messages,
+      temperature: 0.9, presence_penalty: 0.5, frequency_penalty: 0.4, tools: TOOLS, tool_choice: "auto" })
   }).then(function(res){
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
@@ -1551,7 +1586,12 @@ function send() {
     if (reply) pushBot(reply, role, src);
     if (facts.length) {
       var ack = facts; facts = [];
-      pushBot("（悄悄记进了我的小本本：「" + ack.join("；") + "」，我会记住的～）📝", role);
+      var ACKS = [
+        "（记下了：" + ack.join("；") + "）",
+        "（嗯，" + ack.join("；") + "——这个我记住了）",
+        "（好，" + ack.join("；") + "，忘不了）"
+      ];
+      pushBot(pick(ACKS), role);
     }
     /* 真拿到模型回复，就顺手把状态标成"已连通"，不必再手动测一次 */
     if (src === "ai" && (!apiStatus || apiStatus.ok === false)) markStatus(true, "最近一条回复由模型生成", 0);
@@ -1689,8 +1729,10 @@ document.getElementById("moodSave").onclick = function() {
   document.getElementById("moodNote").value = "";
   state.selMood = -1;
   renderMood();
-  var care = ["今天心情不错呀，要保持哦，{n}！🎉","平稳也是好日子，{n}，慢慢来","平静的日子里也要好好吃饭好好睡觉呀，{n}","{n}，今天的难过我都记下了。想说的时候随时找我","烦躁的时候，{n}，出去走走或者洗个热水澡","{n}辛苦了，早点休息，明天我陪你重新出发"];
-  setTimeout(function(){ pushBot(care[moodNow]); }, 300);
+  /* 打卡后角色会来搭话：按角色语气分组，用 fillT 替换称呼 */
+  var style = MOOD_STYLE[state.cur] || "calm";
+  var care = MOOD_CARE[style];
+  setTimeout(function(){ pushBot(fillT(care[moodNow], state.cur)); }, 300);
 };
 
 /* ---------- 角色主页（每个角色自己的设置） ---------- */
