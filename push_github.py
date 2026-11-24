@@ -42,6 +42,8 @@ APKS = {
     "v1.9": "Nuanyu-v1.9.apk",
     "v1.9.1": "Nuanyu-v1.9.1.apk",
     "v1.10": "Jiuban-v1.10.apk",
+    "v1.11": "Jiuban-v1.11.apk",
+    "v1.12": "Jiuban-v1.12.apk",
 }
 
 TITLES = {
@@ -59,6 +61,8 @@ TITLES = {
     "v1.9": "v1.9 设置并入角色主页，新增防漂移锚定",
     "v1.9.1": "v1.9.1 修复晚安推送不触发",
     "v1.10": "v1.10 更名久伴",
+    "v1.11": "v1.11 反 AI 味改造",
+    "v1.12": "v1.12 全新图标",
 }
 
 TOKEN = os.environ.get("GH_TOKEN", "").strip()

@@ -39,3 +39,6 @@ desktop.ini
 .idea/
 .vscode/
 *.swp
+
+# 图标原始素材（第三方下载文件，不入库；成品见 android/res）
+icon-source/
